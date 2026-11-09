@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TRAINER
+  CLIENT
+}
+
+enum GymEquipmentType {
+  MACHINE
+  FREE_WEIGHT
+  CARDIO
+  OTHER
+}
+
+enum ExerciseType {
+  EQUIPMENT
+  FREE_WEIGHT
+  BODYWEIGHT
+  CARDIO
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum WorkoutStatus {
+  PLANNED
+  IN_PROGRESS
+  DONE
+  SKIPPED
+}
+
+enum NutritionType {
+  DAILY
+  POST_WORKOUT
+}
+
+enum ChatType {
+  CLIENT_TRAINER
+  CLIENT_ADMIN
+  TRAINER_ADMIN
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  phone        String   @unique
+  passwordHash String
+  role         Role
+  name         String
+  pushToken    String?
+  timezone     String   @default("Asia/Novosibirsk")
+  createdAt    DateTime @default(now()) @db.Timestamptz
+
+  client                Client?
+  trainer               Trainer?
+  measurements          WeightMeasurement[]    @relation("Measurer")
+  sentMessages          Message[]
+  sentNotifications     Notification[]
+  notificationRecipients NotificationRecipient[]
+  refreshTokens         RefreshToken[]
+  adminChats            Chat[]
+}
+
+model Gym {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  address   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  equipment      GymEquipment[]
+  clientTrainers ClientTrainer[]
+  workouts       Workout[]
+  notifications  Notification[]
+}
+
+model GymEquipment {
+  id          String           @id @default(uuid()) @db.Uuid
+  gymId       String           @db.Uuid
+  name        String
+  type        GymEquipmentType
+  minWeight   Float?
+  maxWeight   Float?
+  photoUrl    String?
+  description String?
+  createdAt   DateTime         @default(now()) @db.Timestamptz
+
+  gym           Gym                 @relation(fields: [gymId], references: [id])
+  templateItems WorkoutTemplateItem[]
+  workoutItems  WorkoutItem[]
+}
+
+model Exercise {
+  id                 String       @id @default(uuid()) @db.Uuid
+  name               String
+  type               ExerciseType
+  muscleGroup        String?
+  requiresEquipment  Boolean      @default(false)
+  videoUrl           String?
+  description        String?
+  createdAt          DateTime     @default(now()) @db.Timestamptz
+
+  templateItems WorkoutTemplateItem[]
+  workoutItems  WorkoutItem[]
+}
+
+model FoodProduct {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  kcal      Float
+  protein   Float
+  fat       Float
+  carbs     Float
+  createdAt DateTime @default(now()) @db.Timestamptz
+}
+
+model Client {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @db.Uuid
+  gender      Gender?
+  height      Float?
+  birthdate   DateTime? @db.Date
+  startWeight Float?
+  startFatMass Float?
+  goal        String?
+  notes       String?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  user                   User                    @relation(fields: [userId], references: [id])
+  weightMeasurements     WeightMeasurement[]
+  clientTrainers         ClientTrainer[]
+  workouts               Workout[]
+  nutritionRecommendations NutritionRecommendation[]
+  chats                  Chat[]
+}
+
+model Trainer {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  user                   User                    @relation(fields: [userId], references: [id])
+  clientTrainers         ClientTrainer[]
+  workoutTemplates       WorkoutTemplate[]
+  workouts               Workout[]
+  nutritionRecommendations NutritionRecommendation[]
+  chats                  Chat[]
+}
+
+model ClientTrainer {
+  id         String   @id @default(uuid()) @db.Uuid
+  clientId   String   @db.Uuid
+  trainerId  String   @db.Uuid
+  gymId      String   @db.Uuid
+  isActive   Boolean  @default(true)
+  assignedAt DateTime @default(now()) @db.Timestamptz
+
+  client  Client  @relation(fields: [clientId], references: [id])
+  trainer Trainer @relation(fields: [trainerId], references: [id])
+  gym     Gym     @relation(fields: [gymId], references: [id])
+
+  @@index([gymId, isActive])
+}
+
+model WeightMeasurement {
+  id         String   @id @default(uuid()) @db.Uuid
+  clientId   String   @db.Uuid
+  measuredBy String   @db.Uuid
+  measuredAt DateTime @db.Timestamptz
+  weight     Float
+  fatMass    Float?
+  comment    String?
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  client   Client @relation(fields: [clientId], references: [id])
+  measurer User   @relation("Measurer", fields: [measuredBy], references: [id])
+
+  @@index([clientId, measuredAt(sort: Desc)])
+}
+
+model WorkoutTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  trainerId   String   @db.Uuid
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  trainer Trainer               @relation(fields: [trainerId], references: [id])
+  items   WorkoutTemplateItem[]
+  workouts Workout[]
+}
+
+model WorkoutTemplateItem {
+  id            String  @id @default(uuid()) @db.Uuid
+  templateId    String  @db.Uuid
+  exerciseId    String  @db.Uuid
+  equipmentId   String? @db.Uuid
+  plannedWeight Float?
+  plannedSets   Int
+  plannedReps   Int
+  restSec       Int?
+  order         Int
+
+  template WorkoutTemplate @relation(fields: [templateId], references: [id])
+  exercise Exercise        @relation(fields: [exerciseId], references: [id])
+  equipment GymEquipment?  @relation(fields: [equipmentId], references: [id])
+}
+
+model Workout {
+  id         String        @id @default(uuid()) @db.Uuid
+  clientId   String        @db.Uuid
+  trainerId  String        @db.Uuid
+  gymId      String        @db.Uuid
+  date       DateTime      @db.Date
+  status     WorkoutStatus @default(PLANNED)
+  comment    String?
+  templateId String?       @db.Uuid
+  createdAt  DateTime      @default(now()) @db.Timestamptz
+
+  client   Client           @relation(fields: [clientId], references: [id])
+  trainer  Trainer          @relation(fields: [trainerId], references: [id])
+  gym      Gym              @relation(fields: [gymId], references: [id])
+  template WorkoutTemplate? @relation(fields: [templateId], references: [id])
+  items    WorkoutItem[]
+
+  @@index([clientId, date])
+  @@index([trainerId, date])
+}
+
+model WorkoutItem {
+  id            String  @id @default(uuid()) @db.Uuid
+  workoutId     String  @db.Uuid
+  exerciseId    String  @db.Uuid
+  equipmentId   String? @db.Uuid
+  plannedWeight Float?
+  plannedSets   Int
+  plannedReps   Int
+  order         Int
+
+  workout   Workout            @relation(fields: [workoutId], references: [id])
+  exercise  Exercise           @relation(fields: [exerciseId], references: [id])
+  equipment GymEquipment?      @relation(fields: [equipmentId], references: [id])
+  result    WorkoutItemResult?
+}
+
+model WorkoutItemResult {
+  id            String   @id @default(uuid()) @db.Uuid
+  itemId        String   @unique @db.Uuid
+  done          Boolean  @default(false)
+  actualWeight  Float?
+  actualReps    Int?
+  clientComment String?
+  updatedAt     DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  item WorkoutItem @relation(fields: [itemId], references: [id])
+}
+
+model NutritionRecommendation {
+  id        String        @id @default(uuid()) @db.Uuid
+  clientId  String        @db.Uuid
+  trainerId String        @db.Uuid
+  type      NutritionType
+  kcal      Float?
+  protein   Float?
+  fat       Float?
+  carbs     Float?
+  comment   String?
+  validFrom DateTime?     @db.Date
+  validTo   DateTime?     @db.Date
+  createdAt DateTime      @default(now()) @db.Timestamptz
+
+  client  Client  @relation(fields: [clientId], references: [id])
+  trainer Trainer @relation(fields: [trainerId], references: [id])
+}
+
+model Chat {
+  id        String   @id @default(uuid()) @db.Uuid
+  type      ChatType
+  clientId  String?  @db.Uuid
+  trainerId String?  @db.Uuid
+  adminId   String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  client  Client?  @relation(fields: [clientId], references: [id])
+  trainer Trainer? @relation(fields: [trainerId], references: [id])
+  admin   User?    @relation(fields: [adminId], references: [id])
+  messages Message[]
+}
+
+model Message {
+  id            String    @id @default(uuid()) @db.Uuid
+  chatId        String    @db.Uuid
+  senderId      String    @db.Uuid
+  text          String
+  attachmentUrl String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  readAt        DateTime? @db.Timestamptz
+
+  chat   Chat @relation(fields: [chatId], references: [id])
+  sender User @relation(fields: [senderId], references: [id])
+
+  @@index([chatId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  gymId     String?  @db.Uuid
+  title     String
+  body      String
+  senderId  String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  gym        Gym?                   @relation(fields: [gymId], references: [id])
+  sender     User                   @relation(fields: [senderId], references: [id])
+  recipients NotificationRecipient[]
+}
+
+model NotificationRecipient {
+  id             String    @id @default(uuid()) @db.Uuid
+  notificationId String    @db.Uuid
+  userId         String    @db.Uuid
+  readAt         DateTime? @db.Timestamptz
+
+  notification Notification @relation(fields: [notificationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String
+  expiresAt DateTime @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id])
+}
