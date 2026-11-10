@@ -201,7 +201,7 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 5. План действий по разделу 4.2 ТЗ — Тренер (mobile, Flutter)
 Все задачи — Sprint 3 по плану работ ТЗ.
 
-[ ] 5.1. Инициализация mobile/.
+[x] 5.1. Инициализация mobile/.
 
 Новый чат OpenCode.
 
@@ -210,6 +210,8 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 Проверка: cd mobile && flutter pub get && flutter analyze без ошибок, flutter run на эмуляторе Android — пустой экран "Gym Trainer".
 
 Коммит: feat(mobile): init flutter project + api client.
+
+Выполнено: Flutter 3.47.9 / Dart 3.13, Android SDK 36; `flutter analyze` и `flutter test` без ошибок, `flutter build apk --debug` OK. Базовый URL API настраивается в приложении (иконка «Адрес сервера»), `--dart-define=API_URL` — fallback; interceptor Bearer + refresh на 401. Firebase отложен до 6.6 (нет `google-services.json`).
 
 [ ] 5.2. Auth (тренер).
 
