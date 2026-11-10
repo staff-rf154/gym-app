@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/api/api_error.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
-import 'features/home/trainer_home_screen.dart';
+import 'features/clients/clients_screen.dart';
 
 class GymTrainerApp extends ConsumerWidget {
   const GymTrainerApp({super.key});
@@ -15,7 +15,7 @@ class GymTrainerApp extends ConsumerWidget {
 
     final Widget home = switch (authState) {
       AsyncData(:final value) =>
-        value == null ? const LoginScreen() : TrainerHomeScreen(user: value),
+        value == null ? const LoginScreen() : ClientsScreen(user: value),
       AsyncError(:final error) => _SessionErrorScreen(error: error),
       _ => const _SplashScreen(),
     };
