@@ -130,7 +130,22 @@
 ---
 4. План действий по разделу 4.1 ТЗ — Администратор (web)
 4.1. Финальная сверка с требованиями 4.1
-[ ] 4.1.1. Сверка страниц с п. 4.1 ТЗ.
+[x] 4.1.1. Сверка страниц с п. 4.1 ТЗ.
+
+Результат сверки `web-admin`:
+- `[x]` Trainers — CRUD, `initial_password` в ответе.
+- `[x]` Clients — CRUD, все поля профиля, назначение/отвязка тренера, переход к замерам.
+- `[x]` Gyms — CRUD, удаление с обработкой 409 (зал с тренажёрами).
+- `[x]` Equipment — CRUD, удаление, enum `MACHINE`/`FREE_WEIGHT`/`CARDIO`/`OTHER`, проверка min≤max.
+- `[x]` Exercises — CRUD, фильтры type/muscleGroup/q.
+- `[x]` FoodProducts — CRUD, валидация нутриентов (`min=0`).
+- `[x]` Загрузка фото — jpg/png/webp ≤5 МБ через `/admin/upload`.
+- `[x]` Notifications — форма рассылки (title, body, опц. gym_id).
+- `[x]` Chats — список чатов, лента сообщений, отправка, автообновление.
+- `[x]` Clients edit — `startWeight`/`startFatMass` disabled при редактировании (S6).
+- `[x]` Settings TZ — страница и пункт меню, `PATCH /auth/timezone` (S12).
+
+Исправления внесены; `pnpm build` и `oxlint` проходят. Ручной UI-smoke — см. 4.2.2.
 
 Пройти по списку: CRUD тренеров, клиентов (со всеми полями профиля), залов, тренажёров (min/max, фото), упражнений, продуктов питания; назначение связей клиент↔тренер↔зал; деактивация связи; загрузка фото (jpg/png/webp ≤5 МБ); рассылка уведомлений (с gym_id / без); чаты 1:1 (клиент, тренер).
 
@@ -145,43 +160,43 @@ text
 Коммит: fix(web): <page> aligned with spec 4.1.
 
 4.2. Тесты раздела 4.1
-[ ] 4.2.1. Backend e2e по admin-эндпоинтам (уже прогнаны в 3.3, отметить как покрытые):
+[x] 4.2.1. Backend e2e по admin-эндпоинтам (уже прогнаны в 3.3, отметить как покрытые) — перепрогнаны 2026-11-09: 8 наборов, 61 тест, все PASS (`pnpm test:e2e`):
 
 auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-products.e2e-spec, clients-trainers.e2e-spec.
 
 Если после 4.1.1 что-то менялось — перепрогнать эти спеки.
 
-[ ] 4.2.2. UI-smoke web-admin (ручной чек-лист).
+[x] 4.2.2. UI-smoke web-admin — проверено 2026-11-09 через API + код-ревью (браузера на сервере нет; ручной браузерный прогон остаётся за человеком).
 
-[ ] S1. Auth: логин/неверный пароль/logout/сохранение сессии после F5.
+[x] S1. Auth: логин 200, неверный пароль 401; logout и сохранение сессии — код `store/auth.ts` (zustand `persist`, ключ `gym-auth`, `logout()` чистит токены/юзера).
 
-[ ] S2. Gyms: CRUD, удаление зала с тренажёром → 409.
+[x] S2. Gyms: create/read/update 201/200/200, удаление пустого зала 204; удаление зала с тренажёром → 409 (`Gym has equipment and cannot be deleted`).
 
-[ ] S3. Equipment: создание с фото, min>max → ошибка, удаление.
+[x] S3. Equipment: upload 201 (`/uploads/*.png`), создание с `photoUrl` 201, `minWeight>maxWeight` → 400, удаление 204.
 
-[ ] S4. Exercises: создание каждого типа, фильтры type/muscleGroup/q.
+[x] S4. Exercises: созданы все 4 типа (EQUIPMENT/FREE_WEIGHT/BODYWEIGHT/CARDIO) → 201; GET `/exercises` фильтры `type`/`muscle_group`/`q` возвращают корректные выборки (1/4/1).
 
-[ ] S5. FoodProducts: kcal=-1 → ошибка, kcal=100 → ok.
+[x] S5. FoodProducts: `kcal=-1` → 400 (`kcal must not be less than 0`), `kcal=100` → 201, удаление 204.
 
-[ ] S6. Clients: создание с полом/ростом/стартовым весом, Modal.success с паролем, age/currentWeight в таблице, startWeight/startFatMass disabled при edit.
+[x] S6. Clients: создание со всеми полями → 201, `age=36`, `initial_password` в ответе; `Modal.success` — `web-admin/src/pages/Clients/index.tsx:156`; `startWeight`/`startFatMass` disabled при edit — строки 426/435; `currentWeight` в списке обновился.
 
-[ ] S7. Trainers: создание, Modal.success с паролем.
+[x] S7. Trainers: создание → 201 + `initial_password`; `Modal.success` — `web-admin/src/pages/Trainers/index.tsx:63`.
 
-[ ] S8. Links: назначить/отвязать тренера в drawer, isActive меняется в БД.
+[x] S8. Links: назначение 201 (`isActive=true`), отвязка 204 (`isActive=false` в БД), повторное назначение 201; активных связей в зале — 1.
 
-[ ] S9. ClientWeight: добавить замер, currentWeight обновился.
+[x] S9. ClientWeight: тренер добавил замер 201; в списке клиентов `currentWeight=78.5`, `currentFatMass=19`.
 
-[ ] S10. Notifications: с gym_id → записи в NotificationRecipient только у клиентов с активной связью в этом зале.
+[x] S10. Notifications: с `gym_id` → `NotificationRecipient` ровно 1 (клиент с активной связью в этом зале); без `gym_id` → все клиенты (3).
 
-[ ] S11. Chats: отправить сообщение → в ленте; проверить через второй браузер/psql.
+[x] S11. Chats: сообщение админа 201, видно клиенту (второй токен/«окно»), в БД 1 `Message`.
 
-[ ] S12. Settings: смена TZ → перезайти → сохранено.
+[x] S12. Settings: PATCH TZ 204 → `/auth/me` Europe/Moscow, после повторного логина сохранилось; возвращено Asia/Novosibirsk.
 
-[ ] 4.2.3. Приёмочные сценарии для 4.1:
+[x] 4.2.3. Приёмочные сценарии для 4.1 — проверено 2026-11-09 через API:
 
-[ ] P2. Цепочка админа: gym → equipment (фото) → exercise → food-product → trainer → client (все поля) → link.
+[x] P2. Цепочка админа пройдена: gym 201 → upload фото 201 → equipment 201 → exercise 201 → food-product 201 → trainer 201 → client (gender/height/birthdate/startWeight/startFatMass/goal/notes) 201 → link 201.
 
-[ ] P8. Broadcast: уведомление с gym_id приходит только клиентам с активной связью в этом зале.
+[x] P8. Broadcast: уведомление с `gym_id` зала 1 → 1 получатель (клиент с активной связью в этом зале); клиент, привязанный к другому залу, исключён.
 
 5. План действий по разделу 4.2 ТЗ — Тренер (mobile, Flutter)
 Все задачи — Sprint 3 по плану работ ТЗ.
