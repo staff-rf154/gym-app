@@ -7,3 +7,13 @@ secrets/
 uploads/
 *.log
 .DS_Store
+
+# Flutter / Android build artifacts
+*.apk
+*.aab
+.dart_tool/
+.gradle/
+.flutter-plugins
+.flutter-plugins-dependencies
+.idea/
+*.iml
