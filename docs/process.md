@@ -303,13 +303,15 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 
 Выполнено: на экране «Настройки» добавлен выбор часового пояса — поиск по списку IANA-зон (включая текущую зону пользователя) и `PATCH /auth/timezone`; профиль перезагружается через `GET /auth/me`, выход сохранён. Проверено: `flutter analyze` без замечаний; изменение и сохранение TZ покрыто `auth.e2e-spec` (PATCH → GET /auth/me). UI-проверка на устройстве — за человеком.
 
-[ ] 5.11. Backend: PATCH /auth/push-token.
+[x] 5.11. Backend: PATCH /auth/push-token.
 
 Промпт: добавить эндпоинт PATCH /auth/push-token (body {token}) → сохранить в User.pushToken. Используется FCM в 5.9, 5.15.
 
 Проверка: curl → pushToken в БД обновился.
 
 Коммит: feat(auth): push token registration.
+
+Выполнено: добавлен `PATCH /auth/push-token` (DTO `UpdatePushTokenDto`, `AuthService.updatePushToken` → `User.pushToken`), спецификация обновлена в `docs/api.md`; риск-замечание в разделе 9 закрыто. Проверено `auth.e2e-spec`: 204 и токен в БД, пустой токен → 400, без авторизации → 401 — 11/11 тестов зелёные.
 
 [ ] 5.12. Тесты раздела 4.2.
 
@@ -489,7 +491,7 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 
 6.6 FCM — без реального secrets/fcm.json push не проверить. Блокирует 6.6 (частично) и 7.6.
 
-5.11 PATCH /auth/push-token — эндпоинта нет в docs/api.md; после реализации обновить спецификацию (docs/api.md) и AGENTS.md при необходимости.
+5.11 PATCH /auth/push-token — реализовано, эндпоинт добавлен и отражён в docs/api.md (закрыто).
 
 Чат — один инстанс backend по ТЗ. Не масштабировать горизонтально до Sprint 4+.
 

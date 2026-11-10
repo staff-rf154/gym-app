@@ -137,6 +137,13 @@ export class AuthService {
     });
   }
 
+  async updatePushToken(userId: string, token: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { pushToken: token },
+    });
+  }
+
   private async issueTokens(user: User): Promise<TokenResponse> {
     const payload = {
       sub: user.id,

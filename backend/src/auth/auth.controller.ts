@@ -16,6 +16,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { AuthService, MeResponse, TokenResponse } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { UpdateTimezoneDto } from './dto/update-timezone.dto';
 import type { RefreshPayload } from './strategies/jwt-refresh.strategy';
 
@@ -64,5 +65,16 @@ export class AuthController {
     @Body() dto: UpdateTimezoneDto,
   ): Promise<void> {
     return this.authService.updateTimezone(userId, dto.timezone);
+  }
+
+  @Patch('push-token')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Обновить FCM-токен устройства' })
+  updatePushToken(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: UpdatePushTokenDto,
+  ): Promise<void> {
+    return this.authService.updatePushToken(userId, dto.token);
   }
 }

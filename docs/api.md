@@ -89,6 +89,12 @@ components:
       properties:
         timezone: { type: string, example: "Europe/Moscow" }
 
+    UpdatePushTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, example: "fcm-registration-token" }
+
     Gym:
       type: object
       properties:
@@ -542,6 +548,18 @@ paths:
       responses:
         '204': { description: No Content }
         '400': { description: Invalid timezone }
+
+  /auth/push-token:
+    patch:
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePushTokenRequest' }
+      responses:
+        '204': { description: No Content }
+        '400': { description: Invalid token }
 
   # ---------- ADMIN: gyms ----------
   /admin/gyms:

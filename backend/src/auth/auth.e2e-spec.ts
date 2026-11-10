@@ -61,7 +61,7 @@ describe('Auth (e2e)', () => {
   beforeEach(async () => {
     await prisma.user.update({
       where: { id: userId },
-      data: { timezone: DEFAULT_TIMEZONE },
+      data: { timezone: DEFAULT_TIMEZONE, pushToken: null },
     });
   });
 
@@ -164,5 +164,40 @@ describe('Auth (e2e)', () => {
       .send({ timezone: 'Invalid/Zone' });
 
     expect(response.status).toBe(400);
+  });
+
+  it('PATCH /auth/push-token → 204 и токен сохранён в User', async () => {
+    const { body } = await login();
+    const pushToken = 'fcm-e2e-token';
+
+    const response = await request(app.getHttpServer())
+      .patch(`${API_PREFIX}/auth/push-token`)
+      .set('Authorization', `Bearer ${body.access_token}`)
+      .send({ token: pushToken });
+
+    expect(response.status).toBe(204);
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    expect(user?.pushToken).toBe(pushToken);
+  });
+
+  it('PATCH /auth/push-token с пустым токеном → 400', async () => {
+    const { body } = await login();
+
+    const response = await request(app.getHttpServer())
+      .patch(`${API_PREFIX}/auth/push-token`)
+      .set('Authorization', `Bearer ${body.access_token}`)
+      .send({ token: '' });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('PATCH /auth/push-token без токена авторизации → 401', async () => {
+    const response = await request(app.getHttpServer())
+      .patch(`${API_PREFIX}/auth/push-token`)
+      .send({ token: 'fcm-e2e-token' });
+
+    expect(response.status).toBe(401);
   });
 });
