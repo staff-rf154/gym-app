@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { NutritionRecommendation, Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ClientNutritionQueryDto } from './dto/client-nutrition-query.dto';
 import { CreateNutritionDto } from './dto/create-nutrition.dto';
+import { TrainerNutritionQueryDto } from './dto/trainer-nutrition-query.dto';
 import { NutritionService } from './nutrition.service';
 
 @ApiTags('trainer')
@@ -13,6 +13,15 @@ import { NutritionService } from './nutrition.service';
 @Controller('trainer/nutrition')
 export class TrainerNutritionController {
   constructor(private readonly nutritionService: NutritionService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Рекомендации питания клиента для тренера' })
+  findByClient(
+    @CurrentUser('userId') userId: string,
+    @Query() query: TrainerNutritionQueryDto,
+  ): Promise<NutritionRecommendation[]> {
+    return this.nutritionService.findTrainerNutrition(userId, query);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Назначить питание клиенту' })

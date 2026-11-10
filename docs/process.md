@@ -273,13 +273,15 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 
 Выполнено: таб «Прогресс» — LineChart динамики веса (вес + жир %) по `GET /reports/weight-dynamics`, список упражнений «Начал X → сейчас Y, N записей» по `GET /reports/exercises-summary`, экран упражнения с графиком план (пунктир) / факт (сплошная) по `GET /reports/exercise-progress`; точки `isActualFallback=true` — пустой серый кружок. API проверено на живых данных (1 замер веса, пустая история упражнений). `flutter analyze` без замечаний, тесты проходят, APK собран.
 
-[ ] 5.8. Питание.
+[x] 5.8. Питание.
 
 Промпт: таб «Питание». Форма: тип (DAILY/POST_WORKOUT), kcal, protein, fat, carbs, comment, validFrom/validTo → POST /trainer/nutrition. Список назначенных рекомендаций.
 
 Проверка: назначить → видно в psql/через клиента (5.13).
 
 Коммит: feat(mobile): trainer nutrition.
+
+Выполнено: таб «Питание» — список назначенных рекомендаций с типом, КБЖУ, комментарием и периодом действия; форма (DAILY/POST_WORKOUT, kcal/protein/fat/carbs, комментарий, validFrom/validTo) → `POST /trainer/nutrition`. Для списка добавлен backend `GET /trainer/nutrition?client_id=` (проверка активной связи тренер↔клиент) и обновлён `docs/api.md`. Проверено API: создание → рекомендация видна в списке; временная запись удалена из БД. `flutter analyze` без замечаний, APK собран, backend пересобран и перезапущен.
 
 [ ] 5.9. Чат (тренер).
 

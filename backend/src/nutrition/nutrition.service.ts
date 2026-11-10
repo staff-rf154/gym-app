@@ -8,6 +8,7 @@ import { NutritionRecommendation, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientNutritionQueryDto } from './dto/client-nutrition-query.dto';
 import { CreateNutritionDto } from './dto/create-nutrition.dto';
+import { TrainerNutritionQueryDto } from './dto/trainer-nutrition-query.dto';
 
 function parseDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
@@ -63,6 +64,34 @@ export class NutritionService {
         validFrom,
         validTo,
       },
+    });
+  }
+
+  async findTrainerNutrition(
+    userId: string,
+    query: TrainerNutritionQueryDto,
+  ): Promise<NutritionRecommendation[]> {
+    const trainer = await this.prisma.trainer.findUnique({ where: { userId } });
+
+    if (!trainer) {
+      throw new ForbiddenException('Trainer profile not found');
+    }
+
+    const link = await this.prisma.clientTrainer.findFirst({
+      where: {
+        clientId: query.client_id,
+        trainerId: trainer.id,
+        isActive: true,
+      },
+    });
+
+    if (!link) {
+      throw new ForbiddenException('Trainer not linked to client');
+    }
+
+    return this.prisma.nutritionRecommendation.findMany({
+      where: { clientId: query.client_id },
+      orderBy: { createdAt: 'desc' },
     });
   }
 

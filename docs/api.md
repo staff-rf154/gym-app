@@ -1102,6 +1102,20 @@ paths:
               schema: { $ref: '#/components/schemas/Workout' }
 
   /trainer/nutrition:
+    get:
+      tags: [trainer]
+      parameters:
+        - { name: client_id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/NutritionRecommendation' }
+        '403':
+          description: Trainer не привязан к клиенту
     post:
       tags: [trainer]
       requestBody:

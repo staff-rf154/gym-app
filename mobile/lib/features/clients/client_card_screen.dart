@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../nutrition/nutrition_tab.dart';
 import '../progress/progress_tab.dart';
 import '../weights/weight_tab.dart';
 import '../workouts/workout_builder_screen.dart';
@@ -36,11 +37,7 @@ class ClientCardScreen extends StatelessWidget {
                 children: [
                   _WorkoutsTab(client: client),
                   ProgressTab(client: client),
-                  _PlaceholderTab(
-                    icon: Icons.restaurant,
-                    title: 'Питание',
-                    description: 'Рекомендации по питанию — шаг 5.8.',
-                  ),
+                  NutritionTab(client: client),
                   WeightTab(client: client),
                   _PlaceholderTab(
                     icon: Icons.chat_bubble_outline,
