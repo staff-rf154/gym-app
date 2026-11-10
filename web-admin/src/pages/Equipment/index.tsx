@@ -7,6 +7,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Popconfirm,
   Select,
   Space,
   Table,
@@ -20,7 +21,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import api from '../../api/client';
 
-type EquipmentType = 'CARDIO' | 'STRENGTH' | 'FREE_WEIGHTS' | 'OTHER';
+type EquipmentType = 'CARDIO' | 'MACHINE' | 'FREE_WEIGHT' | 'OTHER';
 
 interface Equipment {
   id: string;
@@ -44,15 +45,15 @@ interface EquipmentFormValues {
 
 const TYPE_OPTIONS: { value: EquipmentType; label: string }[] = [
   { value: 'CARDIO', label: 'Кардио' },
-  { value: 'STRENGTH', label: 'Силовые' },
-  { value: 'FREE_WEIGHTS', label: 'Свободные веса' },
+  { value: 'MACHINE', label: 'Тренажёр' },
+  { value: 'FREE_WEIGHT', label: 'Свободные веса' },
   { value: 'OTHER', label: 'Другое' },
 ];
 
 const TYPE_LABELS: Record<EquipmentType, string> = {
   CARDIO: 'Кардио',
-  STRENGTH: 'Силовые',
-  FREE_WEIGHTS: 'Свободные веса',
+  MACHINE: 'Тренажёр',
+  FREE_WEIGHT: 'Свободные веса',
   OTHER: 'Другое',
 };
 
@@ -123,6 +124,15 @@ export default function EquipmentPage() {
       return data;
     },
     onSuccess: handleSuccess,
+    onError: handleError,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/admin/equipment/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+      message.success('Тренажёр удалён');
+    },
     onError: handleError,
   });
 
@@ -225,11 +235,23 @@ export default function EquipmentPage() {
     {
       title: '',
       key: 'actions',
-      width: 140,
+      width: 220,
       render: (_, item) => (
-        <Button type="link" onClick={() => openEditModal(item)}>
-          Редактировать
-        </Button>
+        <Space>
+          <Button type="link" onClick={() => openEditModal(item)}>
+            Редактировать
+          </Button>
+          <Popconfirm
+            title="Удалить тренажёр?"
+            okText="Удалить"
+            cancelText="Отмена"
+            onConfirm={() => deleteMutation.mutate(item.id)}
+          >
+            <Button type="link" danger>
+              Удалить
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -282,7 +304,25 @@ export default function EquipmentPage() {
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
 
-            <Form.Item name="maxWeight" label="Макс. вес, кг" style={{ flex: 1 }}>
+            <Form.Item
+              name="maxWeight"
+              label="Макс. вес, кг"
+              style={{ flex: 1 }}
+              dependencies={['minWeight']}
+              rules={[
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    const min = getFieldValue('minWeight');
+                    if (value == null || min == null || value >= min) {
+                      return Promise.resolve();
+                    }
+                    return Promise.reject(
+                      new Error('Макс. вес не может быть меньше минимального'),
+                    );
+                  },
+                }),
+              ]}
+            >
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
           </Space>

@@ -15,6 +15,7 @@ const menuItems: MenuProps['items'] = [
   { key: 'products', label: 'Продукты' },
   { key: 'notifications', label: 'Уведомления' },
   { key: 'chats', label: 'Чаты' },
+  { key: 'settings', label: 'Настройки' },
 ];
 
 export default function MainLayout() {

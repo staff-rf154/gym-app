@@ -420,7 +420,11 @@ export default function ClientsPage() {
           </Form.Item>
 
           <Form.Item name="startWeight" label="Начальный вес, кг">
-            <InputNumber min={0} style={{ width: '100%' }} />
+            <InputNumber
+              min={0}
+              style={{ width: '100%' }}
+              disabled={Boolean(editingClient)}
+            />
           </Form.Item>
 
           <Form.Item name="startFatMass" label="Начальный процент жира">
@@ -428,6 +432,7 @@ export default function ClientsPage() {
               min={0}
               max={100}
               style={{ width: '100%' }}
+              disabled={Boolean(editingClient)}
             />
           </Form.Item>
 

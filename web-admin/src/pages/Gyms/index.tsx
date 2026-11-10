@@ -5,6 +5,7 @@ import {
   Form,
   Input,
   Modal,
+  Popconfirm,
   Space,
   Switch,
   Table,
@@ -76,6 +77,21 @@ export default function GymsPage() {
     onError: handleError,
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/admin/gyms/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gyms'] });
+      message.success('Зал удалён');
+    },
+    onError: (error: unknown) => {
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        message.error('Нельзя удалить зал: в нём есть тренажёры');
+        return;
+      }
+      message.error('Не удалось удалить зал');
+    },
+  });
+
   const openCreateModal = () => {
     setEditingGym(null);
     form.resetFields();
@@ -132,11 +148,23 @@ export default function GymsPage() {
     {
       title: '',
       key: 'actions',
-      width: 140,
+      width: 220,
       render: (_, gym) => (
-        <Button type="link" onClick={() => openEditModal(gym)}>
-          Редактировать
-        </Button>
+        <Space>
+          <Button type="link" onClick={() => openEditModal(gym)}>
+            Редактировать
+          </Button>
+          <Popconfirm
+            title="Удалить зал?"
+            okText="Удалить"
+            cancelText="Отмена"
+            onConfirm={() => deleteMutation.mutate(gym.id)}
+          >
+            <Button type="link" danger>
+              Удалить
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];

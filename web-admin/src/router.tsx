@@ -9,6 +9,9 @@ import FoodProductsPage from './pages/FoodProducts';
 import ClientsPage from './pages/Clients';
 import ClientWeightPage from './pages/ClientWeight';
 import TrainersPage from './pages/Trainers';
+import NotificationsPage from './pages/Notifications';
+import ChatsPage from './pages/Chats';
+import SettingsPage from './pages/Settings';
 import MainLayout from './layouts/MainLayout';
 import { useAuthStore } from './store/auth';
 
@@ -80,11 +83,15 @@ export const router = createBrowserRouter([
           },
           {
             path: 'notifications',
-            element: <PlaceholderPage />,
+            element: <NotificationsPage />,
           },
           {
             path: 'chats',
-            element: <PlaceholderPage />,
+            element: <ChatsPage />,
+          },
+          {
+            path: 'settings',
+            element: <SettingsPage />,
           },
         ],
       },
