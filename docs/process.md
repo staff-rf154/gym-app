@@ -263,13 +263,15 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 
 Выполнено: таб «Вес» в карточке клиента — история замеров, карточка «Старт X → Сейчас Y (Δ)», диалог добавления (вес, жир %, дата, комментарий) → `POST /client/{id}/weight-measurements`. После добавления обновляются замеры и `GET /trainer/clients`. Проверено API: временный замер 77,7 кг поднял `currentWeight` с 78,5 до 77,7, после удаления тестовой строки через psql вернулось 78,5. `flutter analyze` без замечаний, APK собран.
 
-[ ] 5.7. Прогресс клиента.
+[x] 5.7. Прогресс клиента.
 
 Промпт: таб «Прогресс». GET /reports/weight-dynamics?client_id= → LineChart двумя линиями. GET /reports/exercises-summary?client_id= → список «начал X → сейчас Y, N записей». Тап → GET /reports/exercise-progress → LineChart план (пунктир) vs факт (сплошная), isActualFallback=true — серый/пустой кружок.
 
 Проверка: графики рисуются, fallback визуально отличается.
 
 Коммит: feat(mobile): trainer progress charts.
+
+Выполнено: таб «Прогресс» — LineChart динамики веса (вес + жир %) по `GET /reports/weight-dynamics`, список упражнений «Начал X → сейчас Y, N записей» по `GET /reports/exercises-summary`, экран упражнения с графиком план (пунктир) / факт (сплошная) по `GET /reports/exercise-progress`; точки `isActualFallback=true` — пустой серый кружок. API проверено на живых данных (1 замер веса, пустая история упражнений). `flutter analyze` без замечаний, тесты проходят, APK собран.
 
 [ ] 5.8. Питание.
 
