@@ -213,13 +213,15 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 
 Выполнено: Flutter 3.47.9 / Dart 3.13, Android SDK 36; `flutter analyze` и `flutter test` без ошибок, `flutter build apk --debug` OK. Базовый URL API настраивается в приложении (иконка «Адрес сервера»), `--dart-define=API_URL` — fallback; interceptor Bearer + refresh на 401. Firebase отложен до 6.6 (нет `google-services.json`).
 
-[ ] 5.2. Auth (тренер).
+[x] 5.2. Auth (тренер).
 
 Промпт: экран Login (phone/password) → POST /auth/login → сохранить токены → GET /auth/me → перейти на главный. Logout в настройках.
 
 Проверка: вход под тренером (DEFAULT_CLIENT_PASSWORD) → «Мои клиенты».
 
 Коммит: feat(mobile): trainer auth.
+
+Выполнено: экран Login, восстановление сессии через `/auth/me`, refresh токенов на 401, доступ только для роли `TRAINER`, logout в настройках. Проверено API: `POST /auth/login` + `GET /auth/me` для тренеров `+79995550010` и `+73830000000`. UI-проверка на устройстве — за человеком.
 
 [ ] 5.3. Мои клиенты.
 

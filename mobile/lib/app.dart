@@ -1,117 +1,85 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/api/dio_client.dart';
+import 'core/api/api_error.dart';
+import 'features/auth/auth_controller.dart';
+import 'features/auth/login_screen.dart';
+import 'features/home/trainer_home_screen.dart';
 
-class GymTrainerApp extends StatelessWidget {
-  const GymTrainerApp({super.key, required this.apiClient});
-
-  final ApiClient apiClient;
+class GymTrainerApp extends ConsumerWidget {
+  const GymTrainerApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authControllerProvider);
+
+    final Widget home = switch (authState) {
+      AsyncData(:final value) =>
+        value == null ? const LoginScreen() : TrainerHomeScreen(user: value),
+      AsyncError(:final error) => _SessionErrorScreen(error: error),
+      _ => const _SplashScreen(),
+    };
+
     return MaterialApp(
       title: 'Gym Trainer',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
       ),
-      home: HomeScreen(apiClient: apiClient),
+      home: home,
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.apiClient});
-
-  final ApiClient apiClient;
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  Future<void> _editServerUrl() async {
-    final controller = TextEditingController(text: widget.apiClient.baseUrl);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Адрес сервера'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
-            hintText: 'https://gym.example.com',
-            helperText: 'Можно указать домен или полный адрес с /api/v1',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
-    );
-    if (value == null) {
-      return;
-    }
-    await widget.apiClient.setBaseUrl(value);
-    if (!mounted) {
-      return;
-    }
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          widget.apiClient.isConfigured
-              ? 'Сервер: ${widget.apiClient.baseUrl}'
-              : 'Адрес сервера не задан',
-        ),
-      ),
-    );
-  }
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gym Trainer'),
-        actions: [
-          IconButton(
-            onPressed: _editServerUrl,
-            icon: const Icon(Icons.settings),
-            tooltip: 'Адрес сервера',
-          ),
-        ],
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Gym Trainer',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 24),
+            CircularProgressIndicator(),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _SessionErrorScreen extends ConsumerWidget {
+  const _SessionErrorScreen({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'Gym Trainer',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                widget.apiClient.isConfigured
-                    ? widget.apiClient.baseUrl
-                    : 'Укажите адрес сервера в настройках',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              const Icon(Icons.cloud_off, size: 56),
+              const SizedBox(height: 16),
+              Text(apiErrorMessage(error), textAlign: TextAlign.center),
               const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: _editServerUrl,
-                icon: const Icon(Icons.dns),
-                label: const Text('Настроить сервер'),
+              FilledButton(
+                onPressed: () => ref.invalidate(authControllerProvider),
+                child: const Text('Повторить'),
+              ),
+              TextButton(
+                onPressed: () =>
+                    ref.read(authControllerProvider.notifier).logout(),
+                child: const Text('Выйти'),
               ),
             ],
           ),
