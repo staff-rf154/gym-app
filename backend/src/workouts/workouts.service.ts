@@ -273,13 +273,17 @@ export class WorkoutsService {
 
   async clientWorkout(userId: string, id: string): Promise<WorkoutResponse> {
     const client = await this.getClient(userId);
-    const workout = await this.prisma.workout.findFirst({
-      where: { id, clientId: client.id },
+    const workout = await this.prisma.workout.findUnique({
+      where: { id },
       include: workoutInclude,
     });
 
     if (!workout) {
       throw new NotFoundException('Workout not found');
+    }
+
+    if (workout.clientId !== client.id) {
+      throw new ForbiddenException('Workout belongs to another client');
     }
 
     return this.toWorkoutResponse(workout);

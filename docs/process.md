@@ -313,13 +313,13 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 
 Выполнено: добавлен `PATCH /auth/push-token` (DTO `UpdatePushTokenDto`, `AuthService.updatePushToken` → `User.pushToken`), спецификация обновлена в `docs/api.md`; риск-замечание в разделе 9 закрыто. Проверено `auth.e2e-spec`: 204 и токен в БД, пустой токен → 400, без авторизации → 401 — 11/11 тестов зелёные.
 
-[ ] 5.12. Тесты раздела 4.2.
+[x] 5.12. Тесты раздела 4.2.
 
-[ ] workouts.e2e-spec — POST /trainer/workouts (из шаблона, с нуля, чужая связь → 403, нет exercise → 400), PUT, GET /client/workouts?from=&to=, GET /client/workouts/:id (чужой → 403).
+[x] workouts.e2e-spec — POST /trainer/workouts (из шаблона, с нуля, чужая связь → 403, нет exercise → 400), PUT, GET /client/workouts?from=&to=, GET /client/workouts/:id (чужой → 403).
 
-[ ] templates.e2e-spec — CRUD /trainer/templates, чужой тренер → 404/403.
+[x] templates.e2e-spec — CRUD /trainer/templates, чужой тренер → 404/403.
 
-[ ] trainer-clients.e2e-spec — GET /trainer/clients возвращает только клиентов с активной связью, содержит age/currentWeight/currentFatMass.
+[x] trainer-clients.e2e-spec — GET /trainer/clients возвращает только клиентов с активной связью, содержит age/currentWeight/currentFatMass.
 
 [ ] M1–M7 (mobile UI-smoke):
 
@@ -336,6 +336,8 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 [ ] M6. Графики прогресса отрисовываются, fallback отличается.
 
 [ ] M7. Чат: сообщение из web-admin приходит в реальном времени.
+
+Выполнено: добавлены `workouts.e2e-spec` (11 тестов), `templates.e2e-spec` (11 тестов), `trainer-clients.e2e-spec` (4 теста). Для соответствия сценарию «чужой клиент» `GET /client/workouts/:id` теперь отдаёт 403 при существующей тренировке другого клиента (404 — только для несуществующей). Прогон всего backend: 11 suites / 90 tests — зелёные. Mobile: `flutter analyze` без замечаний, debug APK собран. M1–M7 — ручной UI-smoke на Android-устройстве/эмуляторе (в этой среде устройства нет), остаются за человеком; API/WS-сценарии из M1–M7 покрыты e2e и WS-тестом 5.9.
 
 6. План действий по разделу 4.3 ТЗ — Клиент (mobile, Flutter)
 Все задачи — Sprint 3.
