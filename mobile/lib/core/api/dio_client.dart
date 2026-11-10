@@ -54,6 +54,8 @@ class ApiClient {
 
   String get baseUrl => _baseUrl;
 
+  String? get accessToken => _accessToken;
+
   bool get isConfigured => _baseUrl.isNotEmpty;
 
   Future<void> init() async {

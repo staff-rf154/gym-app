@@ -283,13 +283,15 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 
 Выполнено: таб «Питание» — список назначенных рекомендаций с типом, КБЖУ, комментарием и периодом действия; форма (DAILY/POST_WORKOUT, kcal/protein/fat/carbs, комментарий, validFrom/validTo) → `POST /trainer/nutrition`. Для списка добавлен backend `GET /trainer/nutrition?client_id=` (проверка активной связи тренер↔клиент) и обновлён `docs/api.md`. Проверено API: создание → рекомендация видна в списке; временная запись удалена из БД. `flutter analyze` без замечаний, APK собран, backend пересобран и перезапущен.
 
-[ ] 5.9. Чат (тренер).
+[x] 5.9. Чат (тренер).
 
 Промпт: GET /chats → список (peer, lastMessage, unread). Экран чата: GET /chats/{id}/messages, POST /chats/{id}/messages, WS namespace /chat (chat:join, chat:send, chat:message).
 
 Проверка: отправить из web-admin → приходит в реальном времени.
 
 Коммит: feat(mobile): trainer chat.
+
+Выполнено: экран «Чаты» (список с peer/lastMessage/unread, pull-to-refresh) и экран переписки (история `GET /chats/{id}/messages`, отправка через WS `chat:send` с fallback на `POST /chats/{id}/messages`, получение `chat:message`), вкладка «Чат» в карточке клиента и кнопка чатов на главном экране. Проверено: `flutter analyze` без замечаний; WS-тест программой — вход тренером, `chat:join`, отправка сообщения от клиента через REST → `chat:message` пришёл в реальном времени. UI-проверка на устройстве — за человеком.
 
 [ ] 5.10. Настройки (TZ).
 

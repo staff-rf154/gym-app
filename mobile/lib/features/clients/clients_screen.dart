@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
 import '../auth/models.dart';
+import '../chats/chats_screen.dart';
 import '../settings/settings_screen.dart';
 import '../templates/templates_screen.dart';
 import 'client_card_screen.dart';
@@ -22,6 +23,13 @@ class ClientsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Мои клиенты'),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ChatsScreen()),
+            ),
+            icon: const Icon(Icons.chat_bubble_outline),
+            tooltip: 'Чаты',
+          ),
           IconButton(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const TemplatesScreen()),

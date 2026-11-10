@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../chats/chat_models.dart';
+import '../chats/chat_providers.dart';
+import '../chats/chat_screen.dart';
 import '../nutrition/nutrition_tab.dart';
 import '../progress/progress_tab.dart';
 import '../weights/weight_tab.dart';
@@ -39,11 +43,7 @@ class ClientCardScreen extends StatelessWidget {
                   ProgressTab(client: client),
                   NutritionTab(client: client),
                   WeightTab(client: client),
-                  _PlaceholderTab(
-                    icon: Icons.chat_bubble_outline,
-                    title: 'Чат',
-                    description: 'Переписка с клиентом — шаг 5.9.',
-                  ),
+                  _ChatTab(client: client),
                 ],
               ),
             ),
@@ -142,33 +142,67 @@ class _ClientSummary extends StatelessWidget {
   }
 }
 
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
+class _ChatTab extends ConsumerWidget {
+  const _ChatTab({required this.client});
 
-  final IconData icon;
-  final String title;
-  final String description;
+  final TrainerClient client;
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 48),
-            const SizedBox(height: 12),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(description, textAlign: TextAlign.center),
-          ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chats = ref.watch(chatsProvider);
+
+    return switch (chats) {
+      AsyncData(:final value) => _buildLoaded(value),
+      AsyncError() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.cloud_off, size: 48),
+              const SizedBox(height: 12),
+              const Text('Не удалось загрузить чаты'),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => ref.invalidate(chatsProvider),
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
         ),
       ),
-    );
+      _ => const Center(child: CircularProgressIndicator()),
+    };
+  }
+
+  Widget _buildLoaded(List<ChatSummary> chats) {
+    ChatSummary? chat;
+    for (final item in chats) {
+      if (item.peerId == client.userId) {
+        chat = item;
+        break;
+      }
+    }
+
+    if (chat == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.chat_bubble_outline, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                'Чат с ${client.name} ещё не создан',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ChatConversation(chat: chat);
   }
 }
