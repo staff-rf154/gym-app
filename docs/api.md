@@ -1175,6 +1175,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Workout' }
+        '403': { description: Workout принадлежит другому клиенту }
+        '404': { description: Workout not found }
 
   /client/workout-items/{id}/result:
     put:
