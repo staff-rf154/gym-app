@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../workouts/workout_builder_screen.dart';
 import 'trainer_client.dart';
 
 class ClientCardScreen extends StatelessWidget {
@@ -31,11 +32,7 @@ class ClientCardScreen extends StatelessWidget {
             Expanded(
               child: TabBarView(
                 children: [
-                  _PlaceholderTab(
-                    icon: Icons.fitness_center,
-                    title: 'Тренировки',
-                    description: 'Список и создание тренировок — шаг 5.4.',
-                  ),
+                  _WorkoutsTab(client: client),
                   _PlaceholderTab(
                     icon: Icons.show_chart,
                     title: 'Прогресс',
@@ -58,6 +55,50 @@ class ClientCardScreen extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkoutsTab extends StatelessWidget {
+  const _WorkoutsTab({required this.client});
+
+  final TrainerClient client;
+
+  Future<void> _createWorkout(BuildContext context) async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => WorkoutBuilderScreen(client: client)),
+    );
+    if (created == true && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Тренировка назначена')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.fitness_center, size: 48),
+            const SizedBox(height: 12),
+            Text('Тренировки', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            const Text(
+              'Назначьте новую тренировку — она появится у клиента.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => _createWorkout(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Создать тренировку'),
             ),
           ],
         ),
