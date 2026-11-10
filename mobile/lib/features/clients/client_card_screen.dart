@@ -40,7 +40,7 @@ class ClientCardScreen extends StatelessWidget {
               child: TabBarView(
                 children: [
                   _WorkoutsTab(client: client),
-                  ProgressTab(client: client),
+                  ProgressTab(clientId: client.id),
                   NutritionTab(client: client),
                   WeightTab(client: client),
                   _ChatTab(client: client),

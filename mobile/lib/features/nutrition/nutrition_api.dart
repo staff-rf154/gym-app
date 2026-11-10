@@ -17,6 +17,17 @@ class NutritionApi {
         .toList();
   }
 
+  Future<List<NutritionRecommendation>> fetchForDate(DateTime date) async {
+    final response = await _apiClient.dio.get<List<dynamic>>(
+      '/client/nutrition',
+      queryParameters: {'date': _formatDate(date)},
+    );
+    return (response.data ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(NutritionRecommendation.fromJson)
+        .toList();
+  }
+
   Future<NutritionRecommendation> create(
     String clientId,
     NutritionInput input,
@@ -26,5 +37,11 @@ class NutritionApi {
       data: input.toJson(clientId),
     );
     return NutritionRecommendation.fromJson(response.data!);
+  }
+
+  static String _formatDate(DateTime value) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$month-$day';
   }
 }

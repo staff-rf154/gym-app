@@ -6,31 +6,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
-import '../clients/trainer_client.dart';
 import 'exercise_progress_screen.dart';
 import 'report_models.dart';
 import 'reports_providers.dart';
 
 class ProgressTab extends StatelessWidget {
-  const ProgressTab({super.key, required this.client});
+  const ProgressTab({super.key, required this.clientId});
 
-  final TrainerClient client;
+  final String clientId;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        _WeightChartSection(clientId: client.id),
+        WeightChartSection(clientId: clientId),
         const SizedBox(height: 12),
-        _ExerciseSummarySection(clientId: client.id, clientName: client.name),
+        ExerciseSummarySection(clientId: clientId),
       ],
     );
   }
 }
 
-class _WeightChartSection extends ConsumerWidget {
-  const _WeightChartSection({required this.clientId});
+class WeightChartSection extends ConsumerWidget {
+  const WeightChartSection({required this.clientId, super.key});
 
   final String clientId;
 
@@ -71,7 +70,7 @@ class _WeightChartSection extends ConsumerWidget {
                               _LegendItem(color: Colors.blue, label: 'Вес, кг'),
                               _LegendItem(
                                 color: Colors.deepOrange,
-                                label: 'Жир, %',
+                                label: 'Жир, % (справа)',
                               ),
                             ],
                           ),
@@ -93,6 +92,43 @@ class _WeightChartSection extends ConsumerWidget {
   }
 
   LineChartData _chartData(List<WeightDynamicsPoint> points) {
+    final weightValues = [for (final point in points) point.weight];
+    var weightMin = weightValues.reduce(math.min);
+    var weightMax = weightValues.reduce(math.max);
+    if (weightMin == weightMax) {
+      weightMin -= 1;
+      weightMax += 1;
+    } else {
+      final padding = (weightMax - weightMin) * 0.15;
+      weightMin -= padding;
+      weightMax += padding;
+    }
+
+    final fatValues = [
+      for (final point in points)
+        if (point.fatMass != null) point.fatMass!,
+    ];
+    final hasFat = fatValues.isNotEmpty;
+    var fatMin = 0.0;
+    var fatMax = 1.0;
+    if (hasFat) {
+      fatMin = fatValues.reduce(math.min);
+      fatMax = fatValues.reduce(math.max);
+      if (fatMin == fatMax) {
+        fatMin -= 1;
+        fatMax += 1;
+      } else {
+        final padding = (fatMax - fatMin) * 0.15;
+        fatMin -= padding;
+        fatMax += padding;
+      }
+    }
+
+    double scaleFat(double fat) {
+      return weightMin +
+          (fat - fatMin) * (weightMax - weightMin) / (fatMax - fatMin);
+    }
+
     final weightSpots = <FlSpot>[
       for (var index = 0; index < points.length; index++)
         FlSpot(index.toDouble(), points[index].weight),
@@ -100,24 +136,8 @@ class _WeightChartSection extends ConsumerWidget {
     final fatSpots = <FlSpot>[
       for (var index = 0; index < points.length; index++)
         if (points[index].fatMass != null)
-          FlSpot(index.toDouble(), points[index].fatMass!),
+          FlSpot(index.toDouble(), scaleFat(points[index].fatMass!)),
     ];
-
-    final values = <double>[
-      ...points.map((point) => point.weight),
-      for (final point in points)
-        if (point.fatMass != null) point.fatMass!,
-    ];
-    var minY = values.reduce(math.min);
-    var maxY = values.reduce(math.max);
-    if (minY == maxY) {
-      minY -= 1;
-      maxY += 1;
-    } else {
-      final padding = (maxY - minY) * 0.15;
-      minY -= padding;
-      maxY += padding;
-    }
 
     final maxX = points.length <= 1 ? 1.0 : (points.length - 1).toDouble();
     final step = (points.length / 4).ceil().clamp(1, points.length);
@@ -125,14 +145,34 @@ class _WeightChartSection extends ConsumerWidget {
     return LineChartData(
       minX: 0,
       maxX: maxX,
-      minY: minY,
-      maxY: maxY,
+      minY: weightMin,
+      maxY: weightMax,
       gridData: const FlGridData(show: true, drawVerticalLine: false),
       borderData: FlBorderData(show: false),
       titlesData: FlTitlesData(
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(
-          sideTitles: SideTitles(showTitles: false),
+        rightTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: hasFat,
+            reservedSize: 40,
+            getTitlesWidget: (value, meta) {
+              if (!hasFat || value < weightMin || value > weightMax) {
+                return const SizedBox.shrink();
+              }
+              final fat =
+                  fatMin +
+                  (value - weightMin) *
+                      (fatMax - fatMin) /
+                      (weightMax - weightMin);
+              return SideTitleWidget(
+                meta: meta,
+                child: Text(
+                  fat.toStringAsFixed(0),
+                  style: const TextStyle(fontSize: 10),
+                ),
+              );
+            },
+          ),
         ),
         leftTitles: const AxisTitles(
           sideTitles: SideTitles(showTitles: true, reservedSize: 40),
@@ -196,14 +236,10 @@ FlDotPainter _defaultDot(
   );
 }
 
-class _ExerciseSummarySection extends ConsumerWidget {
-  const _ExerciseSummarySection({
-    required this.clientId,
-    required this.clientName,
-  });
+class ExerciseSummarySection extends ConsumerWidget {
+  const ExerciseSummarySection({required this.clientId, super.key});
 
   final String clientId;
-  final String clientName;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

@@ -7,11 +7,26 @@ import 'chat_providers.dart';
 import 'chat_screen.dart';
 
 class ChatsScreen extends ConsumerWidget {
-  const ChatsScreen({super.key});
+  const ChatsScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chats = ref.watch(chatsProvider);
+
+    final body = switch (chats) {
+      AsyncData(:final value) => _ChatsList(chats: value),
+      AsyncError(:final error) => _ChatsError(
+        message: apiErrorMessage(error),
+        onRetry: () => ref.invalidate(chatsProvider),
+      ),
+      _ => const Center(child: CircularProgressIndicator()),
+    };
+
+    if (embedded) {
+      return body;
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -24,14 +39,7 @@ class ChatsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: switch (chats) {
-        AsyncData(:final value) => _ChatsList(chats: value),
-        AsyncError(:final error) => _ChatsError(
-          message: apiErrorMessage(error),
-          onRetry: () => ref.invalidate(chatsProvider),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+      body: body,
     );
   }
 }

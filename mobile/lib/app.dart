@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/api/api_error.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
+import 'features/client/client_home_screen.dart';
 import 'features/clients/clients_screen.dart';
 
 class GymTrainerApp extends ConsumerWidget {
@@ -15,13 +16,17 @@ class GymTrainerApp extends ConsumerWidget {
 
     final Widget home = switch (authState) {
       AsyncData(:final value) =>
-        value == null ? const LoginScreen() : ClientsScreen(user: value),
+        value == null
+            ? const LoginScreen()
+            : value.role == 'CLIENT'
+            ? ClientHomeScreen(user: value)
+            : ClientsScreen(user: value),
       AsyncError(:final error) => _SessionErrorScreen(error: error),
       _ => const _SplashScreen(),
     };
 
     return MaterialApp(
-      title: 'Gym Trainer',
+      title: 'Gym App',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
@@ -42,7 +47,7 @@ class _SplashScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Gym Trainer',
+              'Gym App',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 24),

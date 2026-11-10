@@ -13,6 +13,8 @@ final authApiProvider = Provider<AuthApi>(
 final authControllerProvider =
     AsyncNotifierProvider<AuthController, UserProfile?>(AuthController.new);
 
+const _supportedRoles = {'TRAINER', 'CLIENT'};
+
 class AuthController extends AsyncNotifier<UserProfile?> {
   @override
   Future<UserProfile?> build() async {
@@ -23,7 +25,7 @@ class AuthController extends AsyncNotifier<UserProfile?> {
     }
     try {
       final user = await ref.read(authApiProvider).me();
-      if (user.role != 'TRAINER') {
+      if (!_supportedRoles.contains(user.role)) {
         await client.clearTokens();
         return null;
       }
@@ -47,9 +49,9 @@ class AuthController extends AsyncNotifier<UserProfile?> {
       refreshToken: tokens.refreshToken,
     );
     final user = await api.me();
-    if (user.role != 'TRAINER') {
+    if (!_supportedRoles.contains(user.role)) {
       await client.clearTokens();
-      throw const AuthException('Это приложение только для тренеров');
+      throw const AuthException('Роль пользователя не поддерживается');
     }
     state = AsyncData(user);
   }

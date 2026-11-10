@@ -9,7 +9,7 @@ class ReportsApi {
   Future<List<WeightDynamicsPoint>> fetchWeightDynamics(String clientId) async {
     final response = await _api.dio.get<List<dynamic>>(
       '/reports/weight-dynamics',
-      queryParameters: {'client_id': clientId},
+      queryParameters: _clientParams(clientId),
     );
     final points =
         (response.data ?? [])
@@ -27,7 +27,7 @@ class ReportsApi {
   ) async {
     final response = await _api.dio.get<List<dynamic>>(
       '/reports/exercises-summary',
-      queryParameters: {'client_id': clientId},
+      queryParameters: _clientParams(clientId),
     );
     return (response.data ?? [])
         .map(
@@ -42,8 +42,15 @@ class ReportsApi {
   }) async {
     final response = await _api.dio.get<Map<String, dynamic>>(
       '/reports/exercise-progress',
-      queryParameters: {'client_id': clientId, 'exercise_id': exerciseId},
+      queryParameters: {..._clientParams(clientId), 'exercise_id': exerciseId},
     );
     return ExerciseProgress.fromJson(response.data!);
+  }
+
+  static Map<String, dynamic> _clientParams(String clientId) {
+    if (clientId.isEmpty) {
+      return const {};
+    }
+    return {'client_id': clientId};
   }
 }

@@ -40,7 +40,9 @@ const _timezones = <String>[
 ];
 
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -72,16 +74,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Часовой пояс сохранён')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Часовой пояс сохранён')));
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(apiErrorMessage(error))),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(apiErrorMessage(error))));
     } finally {
       if (mounted) {
         setState(() => _savingTimezone = false);
@@ -102,8 +102,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           builder: (context, setSheetState) {
             final filtered = zones
                 .where(
-                  (zone) =>
-                      zone.toLowerCase().contains(query.toLowerCase()),
+                  (zone) => zone.toLowerCase().contains(query.toLowerCase()),
                 )
                 .toList();
 
@@ -138,8 +137,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   trailing: zone == current
                                       ? const Icon(Icons.check)
                                       : null,
-                                  onTap: () =>
-                                      Navigator.of(context).pop(zone),
+                                  onTap: () => Navigator.of(context).pop(zone),
                                 );
                               },
                             ),
@@ -161,51 +159,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final body = _buildBody(context);
+    if (widget.embedded) {
+      return body;
+    }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Настройки')),
+      body: body,
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     final client = ref.watch(apiClientProvider);
     final user = ref.watch(authControllerProvider).value;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Настройки')),
-      body: ListView(
-        children: [
-          if (user != null)
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: Text(user.name),
-              subtitle: Text('${user.phone} · ${user.role}'),
-            ),
-          const Divider(),
+    return ListView(
+      children: [
+        if (user != null)
           ListTile(
-            leading: const Icon(Icons.schedule),
-            title: const Text('Часовой пояс'),
-            subtitle: Text(
-              user?.timezone.isNotEmpty == true ? user!.timezone : 'Не задан',
-            ),
-            trailing: _savingTimezone
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.chevron_right),
-            onTap: user == null || _savingTimezone
-                ? null
-                : () => _editTimezone(user.timezone),
+            leading: const Icon(Icons.person),
+            title: Text(user.name),
+            subtitle: Text('${user.phone} · ${user.role}'),
           ),
-          ListTile(
-            leading: const Icon(Icons.dns),
-            title: const Text('Адрес сервера'),
-            subtitle: Text(client.isConfigured ? client.baseUrl : 'Не задан'),
-            onTap: _editServerUrl,
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.schedule),
+          title: const Text('Часовой пояс'),
+          subtitle: Text(
+            user?.timezone.isNotEmpty == true ? user!.timezone : 'Не задан',
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Выйти', style: TextStyle(color: Colors.red)),
-            onTap: _logout,
-          ),
-        ],
-      ),
+          trailing: _savingTimezone
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.chevron_right),
+          onTap: user == null || _savingTimezone
+              ? null
+              : () => _editTimezone(user.timezone),
+        ),
+        ListTile(
+          leading: const Icon(Icons.dns),
+          title: const Text('Адрес сервера'),
+          subtitle: Text(client.isConfigured ? client.baseUrl : 'Не задан'),
+          onTap: _editServerUrl,
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.logout, color: Colors.red),
+          title: const Text('Выйти', style: TextStyle(color: Colors.red)),
+          onTap: _logout,
+        ),
+      ],
     );
   }
 }

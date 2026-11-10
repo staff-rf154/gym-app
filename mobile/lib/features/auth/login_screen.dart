@@ -69,7 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gym Trainer'),
+        title: const Text('Gym App'),
         actions: [
           IconButton(
             onPressed: _editServerUrl,
@@ -89,7 +89,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Вход для тренера',
+                    'Вход',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineSmall,
                   ),
