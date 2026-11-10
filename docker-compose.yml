@@ -41,6 +41,7 @@ services:
       PORT: "8080"
     volumes:
       - ./uploads:/app/uploads
+      - ./secrets:/app/secrets:ro
 
   web-admin:
     build: ./web-admin

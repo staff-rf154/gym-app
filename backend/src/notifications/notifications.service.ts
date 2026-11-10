@@ -43,12 +43,22 @@ export class NotificationsService {
       ? (
           await this.prisma.clientTrainer.findMany({
             where: { gymId, isActive: true },
-            select: { client: { select: { userId: true } } },
+            select: {
+              client: {
+                select: {
+                  userId: true,
+                  user: { select: { pushToken: true } },
+                },
+              },
+            },
           })
-        ).map((link) => ({ id: link.client.userId }))
+        ).map((link) => ({
+          id: link.client.userId,
+          pushToken: link.client.user.pushToken,
+        }))
       : await this.prisma.user.findMany({
           where: { role: Role.CLIENT },
-          select: { id: true },
+          select: { id: true, pushToken: true },
         });
 
     if (recipients.length > 0) {
@@ -60,11 +70,13 @@ export class NotificationsService {
       });
     }
 
-    void this.pushService.sendToUsers(
-      recipients.map((recipient) => recipient.id),
-      dto.title,
-      dto.body,
-    );
+    const pushUserIds = recipients
+      .filter((recipient) => Boolean(recipient.pushToken))
+      .map((recipient) => recipient.id);
+
+    if (pushUserIds.length > 0) {
+      void this.pushService.sendToUsers(pushUserIds, dto.title, dto.body);
+    }
 
     return this.toResponse(notification, null);
   }

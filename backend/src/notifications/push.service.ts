@@ -8,9 +8,12 @@ import {
   ServiceAccount,
 } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 
 const BATCH_SIZE = 500;
+const DEFAULT_CREDENTIALS_FILE = join(process.cwd(), 'secrets', 'fcm.json');
 
 @Injectable()
 export class PushService implements OnModuleInit {
@@ -23,20 +26,54 @@ export class PushService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    const raw = this.configService.get<string>('FCM_CREDENTIALS_JSON');
+    const credentials = this.loadCredentials();
 
-    if (!raw) {
-      this.logger.warn('FCM_CREDENTIALS_JSON is not set, push disabled');
+    if (!credentials) {
       return;
     }
 
     try {
-      const credentials = JSON.parse(raw) as ServiceAccount;
       this.app =
         getApps()[0] ??
         initializeApp({ credential: cert(credentials) });
     } catch (error) {
       this.logger.error('Failed to initialize Firebase Admin', error);
+    }
+  }
+
+  private loadCredentials(): ServiceAccount | null {
+    const raw = this.configService.get<string>('FCM_CREDENTIALS_JSON');
+
+    if (raw) {
+      try {
+        return JSON.parse(raw) as ServiceAccount;
+      } catch (error) {
+        this.logger.error('Failed to parse FCM_CREDENTIALS_JSON', error);
+        return null;
+      }
+    }
+
+    const filePath =
+      this.configService.get<string>('FCM_CREDENTIALS_FILE') ??
+      DEFAULT_CREDENTIALS_FILE;
+
+    if (!existsSync(filePath)) {
+      this.logger.error(
+        `FCM credentials not found (FCM_CREDENTIALS_JSON is empty and ${filePath} does not exist), push disabled`,
+      );
+      return null;
+    }
+
+    try {
+      return JSON.parse(
+        readFileSync(filePath, 'utf8'),
+      ) as ServiceAccount;
+    } catch (error) {
+      this.logger.error(
+        `Failed to read FCM credentials from ${filePath}`,
+        error,
+      );
+      return null;
     }
   }
 
@@ -72,6 +109,10 @@ export class PushService implements OnModuleInit {
           tokens: batch,
           notification: { title, body },
         });
+
+        this.logger.log(
+          `fcm: sent ${result.successCount}/${batch.length}`,
+        );
 
         const staleTokens: string[] = [];
         result.responses.forEach((response, index) => {
