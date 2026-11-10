@@ -21,4 +21,11 @@ class AuthApi {
     final response = await _client.dio.get<Map<String, dynamic>>('/auth/me');
     return UserProfile.fromJson(response.data!);
   }
+
+  Future<void> updateTimezone(String timezone) async {
+    await _client.dio.patch<void>(
+      '/auth/timezone',
+      data: {'timezone': timezone},
+    );
+  }
 }

@@ -293,13 +293,15 @@ auth.e2e-spec, gyms.e2e-spec, equipment.e2e-spec, exercises.e2e-spec, food-produ
 
 Выполнено: экран «Чаты» (список с peer/lastMessage/unread, pull-to-refresh) и экран переписки (история `GET /chats/{id}/messages`, отправка через WS `chat:send` с fallback на `POST /chats/{id}/messages`, получение `chat:message`), вкладка «Чат» в карточке клиента и кнопка чатов на главном экране. Проверено: `flutter analyze` без замечаний; WS-тест программой — вход тренером, `chat:join`, отправка сообщения от клиента через REST → `chat:message` пришёл в реальном времени. UI-проверка на устройстве — за человеком.
 
-[ ] 5.10. Настройки (TZ).
+[x] 5.10. Настройки (TZ).
 
 Промпт: экран: TZ Select из Intl.supportedValuesOf('timeZone') → PATCH /auth/timezone. Logout.
 
 Проверка: сменить TZ → перезайти → сохранено.
 
 Коммит: feat(mobile): trainer settings.
+
+Выполнено: на экране «Настройки» добавлен выбор часового пояса — поиск по списку IANA-зон (включая текущую зону пользователя) и `PATCH /auth/timezone`; профиль перезагружается через `GET /auth/me`, выход сохранён. Проверено: `flutter analyze` без замечаний; изменение и сохранение TZ покрыто `auth.e2e-spec` (PATCH → GET /auth/me). UI-проверка на устройстве — за человеком.
 
 [ ] 5.11. Backend: PATCH /auth/push-token.
 
