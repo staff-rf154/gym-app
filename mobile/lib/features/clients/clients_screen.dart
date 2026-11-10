@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_error.dart';
 import '../auth/models.dart';
 import '../settings/settings_screen.dart';
+import '../templates/templates_screen.dart';
 import 'client_card_screen.dart';
 import 'clients_providers.dart';
 import 'trainer_client.dart';
@@ -21,6 +22,13 @@ class ClientsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Мои клиенты'),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const TemplatesScreen()),
+            ),
+            icon: const Icon(Icons.list_alt),
+            tooltip: 'Шаблоны тренировок',
+          ),
           IconButton(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),

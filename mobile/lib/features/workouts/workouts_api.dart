@@ -27,6 +27,45 @@ class WorkoutsApi {
         .toList();
   }
 
+  Future<WorkoutTemplate> createTemplate({
+    required String name,
+    required List<WorkoutItemInput> items,
+    String? description,
+  }) async {
+    final response = await _api.dio.post<Map<String, dynamic>>(
+      '/trainer/templates',
+      data: {
+        'name': name,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        'items': items.map((item) => item.toJson()).toList(),
+      },
+    );
+    return WorkoutTemplate.fromJson(response.data!);
+  }
+
+  Future<WorkoutTemplate> updateTemplate({
+    required String id,
+    required String name,
+    required List<WorkoutItemInput> items,
+    String? description,
+  }) async {
+    final response = await _api.dio.put<Map<String, dynamic>>(
+      '/trainer/templates/$id',
+      data: {
+        'name': name,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        'items': items.map((item) => item.toJson()).toList(),
+      },
+    );
+    return WorkoutTemplate.fromJson(response.data!);
+  }
+
+  Future<void> deleteTemplate(String id) async {
+    await _api.dio.delete<void>('/trainer/templates/$id');
+  }
+
   Future<void> createWorkout({
     required String clientId,
     required String gymId,
