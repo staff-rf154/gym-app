@@ -300,8 +300,12 @@ export class WorkoutsService {
       select: { id: true, workout: { select: { clientId: true } } },
     });
 
-    if (!item || item.workout.clientId !== client.id) {
+    if (!item) {
       throw new NotFoundException('Workout item not found');
+    }
+
+    if (item.workout.clientId !== client.id) {
+      throw new ForbiddenException('Workout item belongs to another client');
     }
 
     return this.prisma.workoutItemResult.upsert({
