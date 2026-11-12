@@ -49,4 +49,14 @@ export class ChatsController {
   ): Promise<Message> {
     return this.chatsService.sendMessage(userId, id, dto);
   }
+
+  @Post(':id/read')
+  @ApiOperation({ summary: 'Отметить сообщения чата прочитанными' })
+  async markRead(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ ok: true }> {
+    await this.chatsService.markRead(userId, id);
+    return { ok: true };
+  }
 }

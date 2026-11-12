@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import {
+  Alert,
   Button,
   Drawer,
+  Empty,
   Form,
   Input,
   Space,
@@ -53,7 +55,12 @@ export default function ChatsPage() {
   const currentUserId = useAuthStore((state) => state.user?.user_id);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
 
-  const { data: chats = [], isLoading } = useQuery({
+  const {
+    data: chats = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['chats'],
     queryFn: async () => {
       const { data } = await api.get<Chat[]>('/chats');
@@ -62,7 +69,12 @@ export default function ChatsPage() {
     refetchInterval: 10000,
   });
 
-  const { data: messages = [] } = useQuery({
+  const {
+    data: messages = [],
+    isLoading: messagesLoading,
+    isError: messagesError,
+    refetch: refetchMessages,
+  } = useQuery({
     queryKey: ['chat-messages', activeChat?.id],
     enabled: Boolean(activeChat),
     queryFn: async () => {
@@ -140,13 +152,30 @@ export default function ChatsPage() {
         Чаты
       </Typography.Title>
 
-      <Table<Chat>
-        rowKey="id"
-        columns={columns}
-        dataSource={chats}
-        loading={isLoading}
-        pagination={false}
-      />
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить чаты"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && chats.length === 0 ? (
+        <Empty description="Чатов пока нет" />
+      ) : (
+        <Table<Chat>
+          rowKey="id"
+          columns={columns}
+          dataSource={chats}
+          loading={isLoading}
+          pagination={false}
+        />
+      )}
 
       <Drawer
         title={activeChat ? activeChat.peerName : 'Чат'}
@@ -166,7 +195,23 @@ export default function ChatsPage() {
                 width: '100%',
               }}
             >
-              {messages.length === 0 ? (
+              {messagesError ? (
+                <Alert
+                  type="error"
+                  showIcon
+                  message="Не удалось загрузить сообщения"
+                  action={
+                    <Button
+                      size="small"
+                      onClick={() => void refetchMessages()}
+                    >
+                      Повторить
+                    </Button>
+                  }
+                />
+              ) : messagesLoading ? (
+                <Typography.Text type="secondary">Загрузка…</Typography.Text>
+              ) : messages.length === 0 ? (
                 <Typography.Text type="secondary">
                   Сообщений пока нет
                 </Typography.Text>
@@ -185,6 +230,17 @@ export default function ChatsPage() {
                       }}
                     >
                       <div>{item.text}</div>
+                      {item.attachmentUrl && (
+                        <div>
+                          <Typography.Link
+                            href={item.attachmentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Вложение
+                          </Typography.Link>
+                        </div>
+                      )}
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         {dayjs(item.createdAt).format('DD.MM.YYYY HH:mm')}
                       </Typography.Text>

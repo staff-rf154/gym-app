@@ -7,6 +7,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { WorkoutTemplateItemDto } from './workout-item.dto';
@@ -34,6 +35,7 @@ export class CreateWorkoutDto {
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   comment?: string;
 
   @ApiProperty({ type: [WorkoutTemplateItemDto] })

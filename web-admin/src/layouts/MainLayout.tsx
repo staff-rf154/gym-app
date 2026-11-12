@@ -5,10 +5,15 @@ import { useAuthStore } from '../store/auth';
 
 const { Header, Sider, Content } = Layout;
 
-const menuItems: MenuProps['items'] = [
+const adminMenuItems: MenuProps['items'] = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'trainers', label: 'Тренеры' },
   { key: 'clients', label: 'Клиенты' },
+  { key: 'goals', label: 'Цели' },
+  { key: 'reports/attendance', label: 'Отчёт: посещаемость' },
+  { key: 'reports/equipment', label: 'Отчёт: тренажёры' },
+  { key: 'reports/trainers', label: 'Отчёт: тренеры' },
+  { key: 'receptions', label: 'Ресепшены' },
   { key: 'gyms', label: 'Залы' },
   { key: 'equipment', label: 'Тренажёры' },
   { key: 'exercises', label: 'Упражнения' },
@@ -18,13 +23,34 @@ const menuItems: MenuProps['items'] = [
   { key: 'settings', label: 'Настройки' },
 ];
 
+const receptionMenuItems: MenuProps['items'] = [
+  { key: 'reception/clients', label: 'Клиенты' },
+  { key: 'reception/trainers', label: 'Тренеры' },
+  { key: 'reports/attendance', label: 'Отчёт: посещаемость' },
+  { key: 'reports/equipment', label: 'Отчёт: тренажёры' },
+  { key: 'reports/trainers', label: 'Отчёт: тренеры' },
+];
+
+const trainerMenuItems: MenuProps['items'] = [
+  { key: 'reports/attendance', label: 'Отчёт: посещаемость' },
+  { key: 'reports/equipment', label: 'Отчёт: тренажёры' },
+  { key: 'reports/trainers', label: 'Отчёт: тренеры' },
+];
+
 export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
 
-  const selectedKey = location.pathname.split('/').filter(Boolean).at(-1);
+  const isReception = user?.role === 'RECEPTION';
+  const isTrainer = user?.role === 'TRAINER';
+  const menuItems = isReception
+    ? receptionMenuItems
+    : isTrainer
+      ? trainerMenuItems
+      : adminMenuItems;
+  const selectedKey = location.pathname.replace('/protected/', '');
 
   const handleLogout = () => {
     logout();
@@ -45,12 +71,16 @@ export default function MainLayout() {
             fontWeight: 600,
           }}
         >
-          Gym Admin
+          {isReception
+            ? 'Gym Reception'
+            : isTrainer
+              ? 'Gym Trainer'
+              : 'Gym Admin'}
         </div>
         <Menu
           theme="dark"
           mode="inline"
-          selectedKeys={selectedKey ? [selectedKey] : []}
+          selectedKeys={[selectedKey]}
           items={menuItems}
           onClick={({ key }) => navigate(`/protected/${key}`)}
         />

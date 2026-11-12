@@ -41,3 +41,31 @@ export class WeightMeasurementsController {
     return this.weightMeasurementsService.create(userId, clientId, dto);
   }
 }
+
+@ApiTags('admin')
+@ApiBearerAuth()
+@Roles(Role.ADMIN)
+@Controller('admin/clients')
+export class AdminWeightMeasurementsController {
+  constructor(
+    private readonly weightMeasurementsService: WeightMeasurementsService,
+  ) {}
+
+  @Get(':id/weight-measurements')
+  @ApiOperation({ summary: 'История замеров клиента (администратор)' })
+  findAll(
+    @Param('id', ParseUUIDPipe) clientId: string,
+  ): Promise<WeightMeasurement[]> {
+    return this.weightMeasurementsService.findAllForAdmin(clientId);
+  }
+
+  @Post(':id/weight-measurements')
+  @ApiOperation({ summary: 'Добавить замер клиента (администратор)' })
+  create(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateWeightMeasurementDto,
+  ): Promise<WeightMeasurement> {
+    return this.weightMeasurementsService.createForAdmin(userId, clientId, dto);
+  }
+}

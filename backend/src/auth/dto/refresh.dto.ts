@@ -1,9 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class RefreshDto {
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      'Refresh-токен. Для web-admin не требуется: берётся из httpOnly-cookie.',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  refresh_token!: string;
+  @MaxLength(4096)
+  refresh_token?: string;
 }

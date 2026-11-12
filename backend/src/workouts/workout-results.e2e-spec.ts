@@ -1,6 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ExerciseType, GymEquipmentType, Role } from '@prisma/client';
+import { ExerciseType, GymEquipmentType, Role, WorkoutStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
 import { AppModule } from '../app.module';
@@ -158,6 +158,7 @@ describe('Workout results (e2e)', () => {
         trainerId: trainer.id,
         gymId: gym.id,
         date: new Date('2026-11-10T00:00:00.000Z'),
+        status: WorkoutStatus.IN_PROGRESS,
         items: {
           create: [
             {

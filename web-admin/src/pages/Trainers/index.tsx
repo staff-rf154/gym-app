@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import {
+  Alert,
   Button,
+  Empty,
   Form,
   Input,
   Modal,
@@ -12,26 +14,43 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
+import GymsDrawer from '../../components/GymsDrawer';
+import PhotoUpload from '../../components/PhotoUpload';
+import { useCrudModal } from '../../hooks/useCrudModal';
+import { useTableSearch } from '../../hooks/useTableSearch';
 
 interface Trainer {
   id: string;
   userId: string;
   phone: string;
   name: string;
+  photoUrl: string | null;
 }
 
 interface TrainerFormValues {
   phone: string;
   name: string;
+  photoUrl?: string | null;
 }
 
 export default function TrainersPage() {
   const [form] = Form.useForm<TrainerFormValues>();
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTrainer, setEditingTrainer] = useState<Trainer | null>(null);
+  const {
+    open: isModalOpen,
+    editing: editingTrainer,
+    openCreate,
+    openEdit,
+    close,
+  } = useCrudModal<Trainer>();
+  const [gymsTrainer, setGymsTrainer] = useState<Trainer | null>(null);
 
-  const { data: trainers = [], isLoading } = useQuery({
+  const {
+    data: trainers = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['trainers'],
     queryFn: async () => {
       const { data } = await api.get<Trainer[]>('/admin/trainers');
@@ -39,13 +58,15 @@ export default function TrainersPage() {
     },
   });
 
+  const { searchValue, setSearchValue, filteredRows } =
+    useTableSearch(trainers);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['trainers'] });
   };
 
   const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingTrainer(null);
+    close();
     form.resetFields();
   };
 
@@ -101,18 +122,17 @@ export default function TrainersPage() {
   });
 
   const openCreateModal = () => {
-    setEditingTrainer(null);
     form.resetFields();
-    setIsModalOpen(true);
+    openCreate();
   };
 
   const openEditModal = (trainer: Trainer) => {
-    setEditingTrainer(trainer);
     form.setFieldsValue({
       phone: trainer.phone,
       name: trainer.name,
+      photoUrl: trainer.photoUrl,
     });
-    setIsModalOpen(true);
+    openEdit(trainer);
   };
 
   const handleFinish = (values: TrainerFormValues) => {
@@ -128,11 +148,32 @@ export default function TrainersPage() {
     { title: 'ФИО', dataIndex: 'name', key: 'name' },
     { title: 'Телефон', dataIndex: 'phone', key: 'phone' },
     {
+      title: 'Фото',
+      dataIndex: 'photoUrl',
+      key: 'photoUrl',
+      width: 88,
+      render: (value: string | null) =>
+        value ? (
+          <img
+            src={value}
+            alt=""
+            width={48}
+            height={48}
+            style={{ objectFit: 'cover', borderRadius: 4 }}
+          />
+        ) : (
+          '—'
+        ),
+    },
+    {
       title: '',
       key: 'actions',
-      width: 220,
+      width: 320,
       render: (_, trainer) => (
         <Space>
+          <Button type="link" onClick={() => setGymsTrainer(trainer)}>
+            Залы
+          </Button>
           <Button type="link" onClick={() => openEditModal(trainer)}>
             Редактировать
           </Button>
@@ -153,17 +194,44 @@ export default function TrainersPage() {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Button type="primary" onClick={openCreateModal}>
-        Создать тренера
-      </Button>
+      <Space wrap>
+        <Input.Search
+          allowClear
+          placeholder="Поиск по всем полям (от 3 символов)"
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          style={{ width: 280 }}
+        />
 
-      <Table<Trainer>
-        rowKey="id"
-        columns={columns}
-        dataSource={trainers}
-        loading={isLoading}
-        pagination={false}
-      />
+        <Button type="primary" onClick={openCreateModal}>
+          Создать тренера
+        </Button>
+      </Space>
+
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить тренеров"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && trainers.length === 0 ? (
+        <Empty description="Тренеров пока нет" />
+      ) : (
+        <Table<Trainer>
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredRows}
+          loading={isLoading}
+          pagination={false}
+        />
+      )}
 
       <Modal
         title={editingTrainer ? 'Редактировать тренера' : 'Новый тренер'}
@@ -193,8 +261,21 @@ export default function TrainersPage() {
           >
             <Input placeholder="+79990000002" />
           </Form.Item>
+
+          <Form.Item name="photoUrl" label="Фото">
+            <PhotoUpload alt="Фото тренера" />
+          </Form.Item>
         </Form>
       </Modal>
+
+      <GymsDrawer
+        open={Boolean(gymsTrainer)}
+        onClose={() => setGymsTrainer(null)}
+        kind="trainer"
+        entityId={gymsTrainer?.id ?? ''}
+        entityName={gymsTrainer?.name ?? ''}
+        invalidateKey={['trainers']}
+      />
     </Space>
   );
 }

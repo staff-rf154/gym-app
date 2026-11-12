@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import {
+  Alert,
   Button,
   DatePicker,
   Drawer,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -20,20 +22,16 @@ import dayjs from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
-
-type Gender = 'MALE' | 'FEMALE' | 'OTHER';
-
-const GENDER_OPTIONS: { value: Gender; label: string }[] = [
-  { value: 'MALE', label: 'Мужской' },
-  { value: 'FEMALE', label: 'Женский' },
-  { value: 'OTHER', label: 'Другой' },
-];
-
-const GENDER_LABELS: Record<Gender, string> = {
-  MALE: 'Мужской',
-  FEMALE: 'Женский',
-  OTHER: 'Другой',
-};
+import GymsDrawer from '../../components/GymsDrawer';
+import PhotoUpload from '../../components/PhotoUpload';
+import {
+  GENDER_LABELS,
+  GENDER_OPTIONS,
+  type Gender,
+} from '../../constants/options';
+import { formatDate } from '../../utils/format';
+import { useCrudModal } from '../../hooks/useCrudModal';
+import { useTableSearch } from '../../hooks/useTableSearch';
 
 interface TrainerLink {
   id: string;
@@ -43,6 +41,7 @@ interface TrainerLink {
   gymId: string;
   gymName: string;
   isActive: boolean;
+  assignedBy: string;
 }
 
 interface Client {
@@ -50,6 +49,7 @@ interface Client {
   userId: string;
   phone: string;
   name: string;
+  photoUrl: string | null;
   gender: Gender | null;
   height: number | null;
   birthdate: string | null;
@@ -58,14 +58,23 @@ interface Client {
   startFatMass: number | null;
   currentWeight: number | null;
   currentFatMass: number | null;
-  goal: string | null;
+  goal: { id: string; name: string; description: string | null } | null;
+  goalText: string | null;
   notes: string | null;
+  gyms: { id: string; gymId: string; gymName: string; isActive: boolean }[];
   active_trainers: TrainerLink[];
+}
+
+interface TrainerGymLink {
+  gymId: string;
+  gymName?: string;
+  isActive: boolean;
 }
 
 interface TrainerOption {
   id: string;
   name: string;
+  gyms?: TrainerGymLink[];
 }
 
 interface GymOption {
@@ -73,15 +82,22 @@ interface GymOption {
   name: string;
 }
 
+interface GoalOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
 interface ClientFormValues {
   phone: string;
   name: string;
+  photoUrl?: string | null;
   gender?: Gender | null;
   height?: number | null;
   birthdate?: Dayjs | null;
   startWeight?: number | null;
   startFatMass?: number | null;
-  goal?: string;
+  goalId?: string | null;
   notes?: string;
 }
 
@@ -90,25 +106,49 @@ interface AssignFormValues {
   gym_id: string;
 }
 
-const formatDate = (value: string | null) =>
-  value ? dayjs(value).format('DD.MM.YYYY') : '—';
+const buildPayload = (values: ClientFormValues) => ({
+  name: values.name,
+  phone: values.phone,
+  photoUrl: values.photoUrl ?? null,
+  gender: values.gender ?? null,
+  height: values.height ?? null,
+  birthdate: values.birthdate ? values.birthdate.format('YYYY-MM-DD') : null,
+  startWeight: values.startWeight ?? null,
+  startFatMass: values.startFatMass ?? null,
+  goalId: values.goalId ?? null,
+  notes: values.notes?.trim() ? values.notes : null,
+});
 
 export default function ClientsPage() {
   const [form] = Form.useForm<ClientFormValues>();
   const [assignForm] = Form.useForm<AssignFormValues>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const {
+    open: isModalOpen,
+    editing: editingClient,
+    openCreate,
+    openEdit,
+    close,
+  } = useCrudModal<Client>();
   const [drawerClient, setDrawerClient] = useState<Client | null>(null);
+  const [gymsClient, setGymsClient] = useState<Client | null>(null);
 
-  const { data: clients = [], isLoading } = useQuery({
+  const {
+    data: clients = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['clients'],
     queryFn: async () => {
       const { data } = await api.get<Client[]>('/admin/clients');
       return data;
     },
   });
+
+  const { searchValue, setSearchValue, filteredRows } =
+    useTableSearch(clients);
 
   const { data: trainers = [] } = useQuery({
     queryKey: ['trainers'],
@@ -126,27 +166,44 @@ export default function ClientsPage() {
     },
   });
 
+  const { data: goals = [] } = useQuery({
+    queryKey: ['goals-admin'],
+    queryFn: async () => {
+      const { data } = await api.get<GoalOption[]>('/admin/goals');
+      return data;
+    },
+  });
+
+  const goalOptions = goals
+    .filter((goal) => goal.isActive)
+    .map((goal) => ({ label: goal.name, value: goal.id }));
+
+  const selectedGymId = Form.useWatch('gym_id', assignForm);
+
+  const trainerOptions = trainers
+    .filter(
+      (trainer) =>
+        !selectedGymId ||
+        trainer.gyms?.some(
+          (gym) => gym.gymId === selectedGymId && gym.isActive,
+        ),
+    )
+    .map((trainer) => ({ label: trainer.name, value: trainer.id }));
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['clients'] });
   };
 
   const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingClient(null);
+    close();
     form.resetFields();
   };
 
   const createMutation = useMutation({
     mutationFn: async (values: ClientFormValues) => {
-      const payload = {
-        ...values,
-        birthdate: values.birthdate
-          ? values.birthdate.format('YYYY-MM-DD')
-          : undefined,
-      };
       const { data } = await api.post<Client & { initial_password?: string }>(
         '/admin/clients',
-        payload,
+        buildPayload(values),
       );
       return data;
     },
@@ -171,15 +228,9 @@ export default function ClientsPage() {
       id: string;
       values: ClientFormValues;
     }) => {
-      const payload = {
-        ...values,
-        birthdate: values.birthdate
-          ? values.birthdate.format('YYYY-MM-DD')
-          : undefined,
-      };
       const { data } = await api.put<Client>(
         `/admin/clients/${id}`,
-        payload,
+        buildPayload(values),
       );
       return data;
     },
@@ -227,25 +278,24 @@ export default function ClientsPage() {
   });
 
   const openCreateModal = () => {
-    setEditingClient(null);
     form.resetFields();
-    setIsModalOpen(true);
+    openCreate();
   };
 
   const openEditModal = (client: Client) => {
-    setEditingClient(client);
     form.setFieldsValue({
       phone: client.phone,
       name: client.name,
+      photoUrl: client.photoUrl,
       gender: client.gender ?? undefined,
       height: client.height ?? undefined,
       birthdate: client.birthdate ? dayjs(client.birthdate) : null,
       startWeight: client.startWeight ?? undefined,
       startFatMass: client.startFatMass ?? undefined,
-      goal: client.goal ?? undefined,
+      goalId: client.goal?.id ?? null,
       notes: client.notes ?? undefined,
     });
-    setIsModalOpen(true);
+    openEdit(client);
   };
 
   const handleFinish = (values: ClientFormValues) => {
@@ -269,6 +319,24 @@ export default function ClientsPage() {
   const columns: ColumnsType<Client> = [
     { title: 'ФИО', dataIndex: 'name', key: 'name' },
     { title: 'Телефон', dataIndex: 'phone', key: 'phone' },
+    {
+      title: 'Фото',
+      dataIndex: 'photoUrl',
+      key: 'photoUrl',
+      width: 88,
+      render: (value: string | null) =>
+        value ? (
+          <img
+            src={value}
+            alt=""
+            width={48}
+            height={48}
+            style={{ objectFit: 'cover', borderRadius: 4 }}
+          />
+        ) : (
+          '—'
+        ),
+    },
     {
       title: 'Пол',
       dataIndex: 'gender',
@@ -302,9 +370,8 @@ export default function ClientsPage() {
     },
     {
       title: 'Цель',
-      dataIndex: 'goal',
       key: 'goal',
-      render: (value: string | null) => value || '—',
+      render: (_, client) => client.goal?.name || client.goalText || '—',
     },
     {
       title: 'Тренеры',
@@ -331,6 +398,9 @@ export default function ClientsPage() {
         <Space>
           <Button type="link" onClick={() => openDrawer(client)}>
             Тренеры
+          </Button>
+          <Button type="link" onClick={() => setGymsClient(client)}>
+            Залы
           </Button>
           <Button
             type="link"
@@ -362,17 +432,44 @@ export default function ClientsPage() {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Button type="primary" onClick={openCreateModal}>
-        Создать клиента
-      </Button>
+      <Space wrap>
+        <Input.Search
+          allowClear
+          placeholder="Поиск по всем полям (от 3 символов)"
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          style={{ width: 280 }}
+        />
 
-      <Table<Client>
-        rowKey="id"
-        columns={columns}
-        dataSource={clients}
-        loading={isLoading}
-        pagination={false}
-      />
+        <Button type="primary" onClick={openCreateModal}>
+          Создать клиента
+        </Button>
+      </Space>
+
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить клиентов"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && clients.length === 0 ? (
+        <Empty description="Клиентов пока нет" />
+      ) : (
+        <Table<Client>
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredRows}
+          loading={isLoading}
+          pagination={false}
+        />
+      )}
 
       <Modal
         title={editingClient ? 'Редактировать клиента' : 'Новый клиент'}
@@ -401,6 +498,10 @@ export default function ClientsPage() {
             rules={[{ required: true, message: 'Введите телефон' }]}
           >
             <Input placeholder="+79990000001" />
+          </Form.Item>
+
+          <Form.Item name="photoUrl" label="Фото">
+            <PhotoUpload alt="Фото клиента" />
           </Form.Item>
 
           <Form.Item name="gender" label="Пол">
@@ -436,8 +537,14 @@ export default function ClientsPage() {
             />
           </Form.Item>
 
-          <Form.Item name="goal" label="Цель">
-            <Input placeholder="Похудение" />
+          <Form.Item name="goalId" label="Цель">
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="Выберите цель"
+              options={goalOptions}
+            />
           </Form.Item>
 
           <Form.Item name="notes" label="Заметки">
@@ -474,6 +581,11 @@ export default function ClientsPage() {
                     render: (_, link) => link.gymName ?? link.gymId,
                   },
                   {
+                    title: 'Назначил',
+                    key: 'assignedBy',
+                    render: (_, link) => link.assignedBy,
+                  },
+                  {
                     title: '',
                     key: 'actions',
                     width: 110,
@@ -505,20 +617,6 @@ export default function ClientsPage() {
               onFinish={(values) => assignMutation.mutate(values)}
             >
               <Form.Item
-                name="trainer_id"
-                label="Тренер"
-                rules={[{ required: true, message: 'Выберите тренера' }]}
-              >
-                <Select
-                  placeholder="Выберите тренера"
-                  options={trainers.map((trainer) => ({
-                    label: trainer.name,
-                    value: trainer.id,
-                  }))}
-                />
-              </Form.Item>
-
-              <Form.Item
                 name="gym_id"
                 label="Зал"
                 rules={[{ required: true, message: 'Выберите зал' }]}
@@ -529,6 +627,26 @@ export default function ClientsPage() {
                     label: gym.name,
                     value: gym.id,
                   }))}
+                  onChange={() =>
+                    assignForm.setFieldValue('trainer_id', undefined)
+                  }
+                />
+              </Form.Item>
+
+              <Form.Item
+                name="trainer_id"
+                label="Тренер"
+                rules={[{ required: true, message: 'Выберите тренера' }]}
+                extra={
+                  selectedGymId
+                    ? undefined
+                    : 'Сначала выберите зал — тренеры фильтруются по залу'
+                }
+              >
+                <Select
+                  placeholder="Выберите тренера"
+                  disabled={!selectedGymId}
+                  options={trainerOptions}
                 />
               </Form.Item>
 
@@ -543,6 +661,15 @@ export default function ClientsPage() {
           </Space>
         )}
       </Drawer>
+
+      <GymsDrawer
+        open={Boolean(gymsClient)}
+        onClose={() => setGymsClient(null)}
+        kind="client"
+        entityId={gymsClient?.id ?? ''}
+        entityName={gymsClient?.name ?? ''}
+        invalidateKey={['clients']}
+      />
     </Space>
   );
 }

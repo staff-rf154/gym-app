@@ -1,7 +1,7 @@
 # ER — модели MVP (финальная версия)
 
 ## User
-id uuid PK, phone text UNIQUE, passwordHash text, role enum[ADMIN,TRAINER,CLIENT],
+id uuid PK, phone text UNIQUE, passwordHash text, role enum[ADMIN,RECEPTION,TRAINER,CLIENT],
 name text, pushToken text?, timezone text default 'Asia/Novosibirsk',
 createdAt timestamptz
 
@@ -21,23 +21,53 @@ videoUrl text?, description text?
 ## FoodProduct
 id uuid PK, name text, kcal float, protein float, fat float, carbs float
 
+## Goal
+id uuid PK, name text UNIQUE, description text?,
+isActive boolean DEFAULT true, sortOrder int DEFAULT 0,
+createdAt timestamptz, updatedAt timestamptz
+-- глобальный справочник целей (не привязан к залу)
+
 ## Client
 id uuid PK, userId uuid UNIQUE FK→User,
+photoUrl text?,
 gender enum[MALE,FEMALE,OTHER]?,
 height float?,                   -- см
 birthdate date?,                 -- для вычисления age
 startWeight float?,              -- кг, неизменный
 startFatMass float?,             -- %
-goal text?, notes text?
+goalId uuid? FK→Goal,            -- справочник целей
+goal text?,                      -- legacy-текст, синхронизируется с goalId
+notes text?
 -- age не хранится, вычисляется из birthdate
 
 ## Trainer
-id uuid PK, userId uuid UNIQUE FK→User
+id uuid PK, userId uuid UNIQUE FK→User, photoUrl text?
 
 ## ClientTrainer
 id uuid PK, clientId uuid FK→Client, trainerId uuid FK→Trainer, gymId uuid FK→Gym,
-isActive bool default true, assignedAt timestamptz default now()
+isActive bool default true,
+assignedBy text default 'ADMIN',   -- ADMIN | RECEPTION | CLIENT
+assignedById uuid? FK→User,        -- кто назначил (для ADMIN/RECEPTION)
+assignedAt timestamptz default now()
+UNIQUE (clientId, trainerId, gymId)
+INDEX (gymId, isActive), INDEX (trainerId, isActive), INDEX (clientId, isActive)
+
+## TrainerGym
+id uuid PK, trainerId uuid FK→Trainer, gymId uuid FK→Gym,
+isActive bool default true, createdAt timestamptz
+UNIQUE (trainerId, gymId)
 INDEX (gymId, isActive)
+
+## ClientGym
+id uuid PK, clientId uuid FK→Client, gymId uuid FK→Gym,
+isActive bool default true, createdAt timestamptz
+UNIQUE (clientId, gymId)
+INDEX (gymId, isActive)
+
+## Reception
+id uuid PK, userId uuid UNIQUE FK→User, gymId uuid FK→Gym, createdAt timestamptz
+INDEX (gymId)
+-- роль RECEPTION добавлена в enum Role; миграция 20261111140000_reception
 
 ## WeightMeasurement
 id uuid PK, clientId uuid FK→Client,
@@ -61,6 +91,10 @@ id uuid PK, clientId uuid FK→Client, trainerId uuid FK→Trainer, gymId uuid F
 date date, status enum[PLANNED,IN_PROGRESS,DONE,SKIPPED] default PLANNED,
 comment text?, templateId uuid? FK→WorkoutTemplate, createdAt timestamptz
 INDEX (clientId, date), INDEX (trainerId, date)
+-- Жизненный цикл: PLANNED → IN_PROGRESS → DONE; SKIPPED — пропущена.
+-- Старт/завершение доступны клиенту-владельцу и тренеру тренировки; статус общий,
+-- переход выполняется условным UPDATE с проверкой текущего статуса (защита от гонки).
+-- После DONE/SKIPPED изменение WorkoutItemResult и состава/плана тренировки запрещено.
 
 ## WorkoutItem
 id uuid PK, workoutId uuid FK→Workout, exerciseId uuid FK→Exercise,

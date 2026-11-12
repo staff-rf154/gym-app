@@ -39,7 +39,7 @@ export class NotificationsService {
       data: { gymId, title: dto.title, body: dto.body, senderId },
     });
 
-    const recipients = gymId
+    const rawRecipients = gymId
       ? (
           await this.prisma.clientTrainer.findMany({
             where: { gymId, isActive: true },
@@ -60,6 +60,12 @@ export class NotificationsService {
           where: { role: Role.CLIENT },
           select: { id: true, pushToken: true },
         });
+
+    const recipients = [
+      ...new Map(
+        rawRecipients.map((recipient) => [recipient.id, recipient]),
+      ).values(),
+    ];
 
     if (recipients.length > 0) {
       await this.prisma.notificationRecipient.createMany({

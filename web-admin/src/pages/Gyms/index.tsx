@@ -1,7 +1,8 @@
-import { useState } from 'react';
 import axios from 'axios';
 import {
+  Alert,
   Button,
+  Empty,
   Form,
   Input,
   Modal,
@@ -14,7 +15,10 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
+import { useCrudModal } from '../../hooks/useCrudModal';
+import { useTableSearch } from '../../hooks/useTableSearch';
 
 interface Gym {
   id: string;
@@ -32,16 +36,29 @@ interface GymFormValues {
 export default function GymsPage() {
   const [form] = Form.useForm<GymFormValues>();
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingGym, setEditingGym] = useState<Gym | null>(null);
+  const navigate = useNavigate();
+  const {
+    open: isModalOpen,
+    editing: editingGym,
+    openCreate,
+    openEdit,
+    close,
+  } = useCrudModal<Gym>();
 
-  const { data: gyms = [], isLoading } = useQuery({
+  const {
+    data: gyms = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['gyms'],
     queryFn: async () => {
       const { data } = await api.get<Gym[]>('/admin/gyms');
       return data;
     },
   });
+
+  const { searchValue, setSearchValue, filteredRows } = useTableSearch(gyms);
 
   const handleError = (error: unknown) => {
     if (axios.isAxiosError(error) && error.response?.status === 409) {
@@ -54,8 +71,7 @@ export default function GymsPage() {
 
   const handleSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['gyms'] });
-    setIsModalOpen(false);
-    setEditingGym(null);
+    close();
     form.resetFields();
   };
 
@@ -93,25 +109,22 @@ export default function GymsPage() {
   });
 
   const openCreateModal = () => {
-    setEditingGym(null);
     form.resetFields();
     form.setFieldsValue({ isActive: true });
-    setIsModalOpen(true);
+    openCreate();
   };
 
   const openEditModal = (gym: Gym) => {
-    setEditingGym(gym);
     form.setFieldsValue({
       name: gym.name,
       address: gym.address,
       isActive: gym.isActive,
     });
-    setIsModalOpen(true);
+    openEdit(gym);
   };
 
   const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingGym(null);
+    close();
     form.resetFields();
   };
 
@@ -148,9 +161,15 @@ export default function GymsPage() {
     {
       title: '',
       key: 'actions',
-      width: 220,
+      width: 300,
       render: (_, gym) => (
         <Space>
+          <Button
+            type="link"
+            onClick={() => navigate(`/protected/gyms/${gym.id}/equipment`)}
+          >
+            Тренажёры
+          </Button>
           <Button type="link" onClick={() => openEditModal(gym)}>
             Редактировать
           </Button>
@@ -171,17 +190,44 @@ export default function GymsPage() {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Button type="primary" onClick={openCreateModal}>
-        Добавить зал
-      </Button>
+      <Space wrap>
+        <Input.Search
+          allowClear
+          placeholder="Поиск по всем полям (от 3 символов)"
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          style={{ width: 280 }}
+        />
 
-      <Table<Gym>
-        rowKey="id"
-        columns={columns}
-        dataSource={gyms}
-        loading={isLoading}
-        pagination={false}
-      />
+        <Button type="primary" onClick={openCreateModal}>
+          Добавить зал
+        </Button>
+      </Space>
+
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить залы"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && gyms.length === 0 ? (
+        <Empty description="Залов пока нет" />
+      ) : (
+        <Table<Gym>
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredRows}
+          loading={isLoading}
+          pagination={false}
+        />
+      )}
 
       <Modal
         title={editingGym ? 'Редактировать зал' : 'Новый зал'}

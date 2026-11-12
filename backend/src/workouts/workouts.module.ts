@@ -3,6 +3,7 @@ import {
   ClientWorkoutItemsController,
   ClientWorkoutsController,
   TrainerTemplatesController,
+  TrainerWorkoutItemsController,
   TrainerWorkoutsController,
 } from './workouts.controller';
 import { WorkoutsService } from './workouts.service';
@@ -13,6 +14,7 @@ import { WorkoutsService } from './workouts.service';
     TrainerWorkoutsController,
     ClientWorkoutsController,
     ClientWorkoutItemsController,
+    TrainerWorkoutItemsController,
   ],
   providers: [WorkoutsService],
 })

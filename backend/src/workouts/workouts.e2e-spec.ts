@@ -109,6 +109,12 @@ describe('Workouts (e2e)', () => {
         ],
       },
     });
+    await prisma.clientGym.deleteMany({
+      where: { client: { user: { phone: { in: PHONES } } } },
+    });
+    await prisma.trainerGym.deleteMany({
+      where: { trainer: { user: { phone: { in: PHONES } } } },
+    });
     await prisma.client.deleteMany({
       where: { user: { phone: { in: PHONES } } },
     });
@@ -219,6 +225,12 @@ describe('Workouts (e2e)', () => {
     await prisma.clientTrainer.create({
       data: { clientId, trainerId: trainer.id, gymId },
     });
+    await prisma.trainerGym.create({
+      data: { trainerId: trainer.id, gymId },
+    });
+    await prisma.clientGym.create({
+      data: { clientId, gymId },
+    });
 
     trainerToken = await login(TRAINER_PHONE);
     otherTrainerToken = await login(OTHER_TRAINER_PHONE);
@@ -243,6 +255,10 @@ describe('Workouts (e2e)', () => {
     });
     await prisma.workoutTemplate.deleteMany({ where: { id: templateId } });
     await prisma.clientTrainer.deleteMany({ where: { clientId } });
+    await prisma.clientGym.deleteMany({ where: { clientId } });
+    await prisma.trainerGym.deleteMany({
+      where: { trainer: { user: { phone: { in: PHONES } } } },
+    });
     await prisma.client.deleteMany({
       where: { id: { in: [clientId, otherClientId] } },
     });
@@ -411,6 +427,52 @@ describe('Workouts (e2e)', () => {
         date: '2026-11-11',
         items: [item()],
       });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('GET /trainer/workouts возвращает тренировки и фильтрует по клиенту', async () => {
+    const response = await authed(trainerToken).get(
+      `/trainer/workouts?client_id=${clientId}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(2);
+    expect(
+      response.body.map((workout: { id: string }) => workout.id),
+    ).toEqual([workoutId, secondWorkoutId]);
+    expect(response.body[0]).toMatchObject({
+      id: workoutId,
+      clientName: expect.any(String),
+      gymName: expect.any(String),
+    });
+  });
+
+  it('GET /trainer/workouts?from=&to= фильтрует по дате', async () => {
+    const response = await authed(trainerToken).get(
+      '/trainer/workouts?from=2026-11-09&to=2026-11-30',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((workout: { id: string }) => workout.id)).toEqual([
+      workoutId,
+    ]);
+  });
+
+  it('GET /trainer/workouts/:id своей тренировки → 200', async () => {
+    const response = await authed(trainerToken).get(
+      `/trainer/workouts/${workoutId}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.id).toBe(workoutId);
+    expect(response.body.items).toHaveLength(1);
+  });
+
+  it('GET /trainer/workouts/:id чужим тренером → 404', async () => {
+    const response = await authed(otherTrainerToken).get(
+      `/trainer/workouts/${workoutId}`,
+    );
 
     expect(response.status).toBe(404);
   });

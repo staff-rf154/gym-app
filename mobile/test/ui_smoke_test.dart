@@ -201,25 +201,26 @@ class _FakeChatApi extends ChatApi {
   );
 }
 
-ClientWorkout _workout(DateTime date) => ClientWorkout(
-  id: 'workout-1',
-  clientId: _clientUser.userId,
-  gymId: 'gym-1',
-  date: _dateKey(date),
-  status: 'PLANNED',
-  comment: 'Разминка 10 минут',
-  items: const [
-    ClientWorkoutItem(
-      id: 'item-1',
-      exerciseId: 'exercise-1',
-      exerciseName: 'Жим лёжа',
-      plannedWeight: 80,
-      plannedSets: 4,
-      plannedReps: 8,
-      order: 1,
-    ),
-  ],
-);
+ClientWorkout _workout(DateTime date, {String status = 'PLANNED'}) =>
+    ClientWorkout(
+      id: 'workout-1',
+      clientId: _clientUser.userId,
+      gymId: 'gym-1',
+      date: _dateKey(date),
+      status: status,
+      comment: 'Разминка 10 минут',
+      items: const [
+        ClientWorkoutItem(
+          id: 'item-1',
+          exerciseId: 'exercise-1',
+          exerciseName: 'Жим лёжа',
+          plannedWeight: 80,
+          plannedSets: 4,
+          plannedReps: 8,
+          order: 1,
+        ),
+      ],
+    );
 
 Widget _app(ProviderContainer container, Widget child) {
   return UncontrolledProviderScope(
@@ -259,7 +260,7 @@ void main() {
   testWidgets('M9: отметка done с фактическим весом сохраняется', (
     tester,
   ) async {
-    final workout = _workout(DateTime.now());
+    final workout = _workout(DateTime.now(), status: 'IN_PROGRESS');
     final api = _FakeClientWorkoutsApi();
 
     final container = ProviderContainer(
@@ -292,6 +293,54 @@ void main() {
     expect(saved.actualReps, 8);
     expect(saved.clientComment, 'Тяжело');
     expect(find.text('Результаты сохранены'), findsOneWidget);
+  });
+
+  testWidgets('M15: до старта поля заблокированы', (tester) async {
+    final workout = _workout(DateTime.now());
+    final api = _FakeClientWorkoutsApi();
+
+    final container = ProviderContainer(
+      overrides: [clientWorkoutsApiProvider.overrideWithValue(api)],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      _app(
+        container,
+        WorkoutDayScreen(date: DateTime.now(), workouts: [workout]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Начать тренировку'), findsOneWidget);
+    expect(find.text('Сохранить результаты'), findsNothing);
+
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(fields, isNotEmpty);
+    expect(fields.every((field) => field.enabled == false), isTrue);
+  });
+
+  testWidgets('M16: завершённая тренировка только для чтения', (tester) async {
+    final workout = _workout(DateTime.now(), status: 'DONE');
+    final api = _FakeClientWorkoutsApi();
+
+    final container = ProviderContainer(
+      overrides: [clientWorkoutsApiProvider.overrideWithValue(api)],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      _app(
+        container,
+        WorkoutDayScreen(date: DateTime.now(), workouts: [workout]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Выполнена'), findsOneWidget);
+    expect(find.text('Начать тренировку'), findsNothing);
+    expect(find.text('Сохранить результаты'), findsNothing);
+    expect(find.textContaining('только для чтения'), findsOneWidget);
   });
 
   testWidgets('M10: питание от тренера отображается на клиенте', (

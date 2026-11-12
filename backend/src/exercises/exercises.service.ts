@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Exercise } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExerciseDto } from './dto/create-exercise.dto';
@@ -44,6 +48,17 @@ export class ExercisesService {
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
+
+    const [templateItemCount, workoutItemCount] = await Promise.all([
+      this.prisma.workoutTemplateItem.count({ where: { exerciseId: id } }),
+      this.prisma.workoutItem.count({ where: { exerciseId: id } }),
+    ]);
+
+    if (templateItemCount > 0 || workoutItemCount > 0) {
+      throw new ConflictException(
+        'Exercise is used in workouts and cannot be deleted',
+      );
+    }
 
     await this.prisma.exercise.delete({ where: { id } });
   }

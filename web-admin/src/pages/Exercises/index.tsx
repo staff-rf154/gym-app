@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import {
+  Alert,
   Button,
+  Empty,
   Form,
   Input,
   Modal,
@@ -15,6 +17,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
+import { useCrudModal } from '../../hooks/useCrudModal';
+import { useTableSearch } from '../../hooks/useTableSearch';
 
 type ExerciseType = 'EQUIPMENT' | 'FREE_WEIGHT' | 'BODYWEIGHT' | 'CARDIO';
 
@@ -31,10 +35,10 @@ interface Exercise {
 interface ExerciseFormValues {
   name: string;
   type: ExerciseType;
-  muscleGroup?: string;
+  muscleGroup?: string | null;
   requiresEquipment: boolean;
-  videoUrl?: string;
-  description?: string;
+  videoUrl?: string | null;
+  description?: string | null;
 }
 
 const TYPE_OPTIONS: { value: ExerciseType; label: string }[] = [
@@ -54,27 +58,37 @@ const TYPE_LABELS: Record<ExerciseType, string> = {
 export default function ExercisesPage() {
   const [form] = Form.useForm<ExerciseFormValues>();
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const {
+    open: isModalOpen,
+    editing: editingExercise,
+    openCreate,
+    openEdit,
+    close,
+  } = useCrudModal<Exercise>();
 
   const [type, setType] = useState<ExerciseType | undefined>();
   const [muscleGroup, setMuscleGroup] = useState('');
-  const [qInput, setQInput] = useState('');
-  const [q, setQ] = useState('');
 
-  const { data: exercises = [], isLoading } = useQuery({
-    queryKey: ['exercises', { type, muscleGroup, q }],
+  const {
+    data: exercises = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['exercises', { type, muscleGroup }],
     queryFn: async () => {
       const { data } = await api.get<Exercise[]>('/exercises', {
         params: {
           type,
           muscle_group: muscleGroup || undefined,
-          q: q || undefined,
         },
       });
       return data;
     },
   });
+
+  const { searchValue, setSearchValue, filteredRows } =
+    useTableSearch(exercises);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['exercises'] });
@@ -82,14 +96,25 @@ export default function ExercisesPage() {
 
   const handleSuccess = () => {
     invalidate();
-    setIsModalOpen(false);
-    setEditingExercise(null);
+    close();
     form.resetFields();
   };
 
+  const buildPayload = (values: ExerciseFormValues) => ({
+    name: values.name,
+    type: values.type,
+    muscleGroup: values.muscleGroup || null,
+    requiresEquipment: values.requiresEquipment,
+    videoUrl: values.videoUrl?.trim() ? values.videoUrl : null,
+    description: values.description?.trim() ? values.description : null,
+  });
+
   const createMutation = useMutation({
     mutationFn: async (values: ExerciseFormValues) => {
-      const { data } = await api.post<Exercise>('/admin/exercises', values);
+      const { data } = await api.post<Exercise>(
+        '/admin/exercises',
+        buildPayload(values),
+      );
       return data;
     },
     onSuccess: handleSuccess,
@@ -106,7 +131,7 @@ export default function ExercisesPage() {
     }) => {
       const { data } = await api.put<Exercise>(
         `/admin/exercises/${id}`,
-        values,
+        buildPayload(values),
       );
       return data;
     },
@@ -124,14 +149,12 @@ export default function ExercisesPage() {
   });
 
   const openCreateModal = () => {
-    setEditingExercise(null);
     form.resetFields();
     form.setFieldsValue({ requiresEquipment: false });
-    setIsModalOpen(true);
+    openCreate();
   };
 
   const openEditModal = (exercise: Exercise) => {
-    setEditingExercise(exercise);
     form.setFieldsValue({
       name: exercise.name,
       type: exercise.type,
@@ -140,12 +163,11 @@ export default function ExercisesPage() {
       videoUrl: exercise.videoUrl ?? undefined,
       description: exercise.description ?? undefined,
     });
-    setIsModalOpen(true);
+    openEdit(exercise);
   };
 
   const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingExercise(null);
+    close();
     form.resetFields();
   };
 
@@ -217,16 +239,10 @@ export default function ExercisesPage() {
       <Space wrap>
         <Input.Search
           allowClear
-          placeholder="Поиск по названию"
-          value={qInput}
-          onChange={(event) => {
-            setQInput(event.target.value);
-            if (!event.target.value) {
-              setQ('');
-            }
-          }}
-          onSearch={setQ}
-          style={{ width: 260 }}
+          placeholder="Поиск по всем полям (от 3 символов)"
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          style={{ width: 280 }}
         />
 
         <Select
@@ -251,13 +267,30 @@ export default function ExercisesPage() {
         </Button>
       </Space>
 
-      <Table<Exercise>
-        rowKey="id"
-        columns={columns}
-        dataSource={exercises}
-        loading={isLoading}
-        pagination={false}
-      />
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить упражнения"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && exercises.length === 0 ? (
+        <Empty description="Упражнений пока нет" />
+      ) : (
+        <Table<Exercise>
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredRows}
+          loading={isLoading}
+          pagination={false}
+        />
+      )}
 
       <Modal
         title={

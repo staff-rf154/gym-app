@@ -73,8 +73,14 @@ describe('Clients, Trainers and links (e2e)', () => {
     await prisma.clientTrainer.deleteMany({
       where: { gym: { name: { startsWith: GYM_PREFIX } } },
     });
+    await prisma.clientGym.deleteMany({
+      where: { client: { user: { phone: { startsWith: '+7999000051' } } } },
+    });
     await prisma.client.deleteMany({
       where: { user: { phone: { startsWith: '+7999000051' } } },
+    });
+    await prisma.trainerGym.deleteMany({
+      where: { trainer: { user: { phone: { in: [TRAINER_PHONE, NEW_TRAINER_PHONE] } } } },
     });
     await prisma.trainer.deleteMany({
       where: { user: { phone: { in: [TRAINER_PHONE, NEW_TRAINER_PHONE] } } },
@@ -133,15 +139,22 @@ describe('Clients, Trainers and links (e2e)', () => {
   });
 
   afterAll(async () => {
+    const trainerIds = [trainerId, newTrainerId].filter(
+      Boolean,
+    ) as string[];
     await prisma.clientTrainer.deleteMany({
       where: { clientId, trainerId },
     });
     await prisma.weightMeasurement.deleteMany({ where: { clientId } });
     if (clientId) {
+      await prisma.clientGym.deleteMany({ where: { clientId } });
       await prisma.client.deleteMany({ where: { id: clientId } });
     }
+    await prisma.trainerGym.deleteMany({
+      where: { trainerId: { in: trainerIds } },
+    });
     await prisma.trainer.deleteMany({
-      where: { id: { in: [trainerId, newTrainerId].filter(Boolean) as string[] } },
+      where: { id: { in: trainerIds } },
     });
     await prisma.gym.deleteMany({ where: { id: gymId } });
     await prisma.refreshToken.deleteMany({
@@ -201,7 +214,8 @@ describe('Clients, Trainers and links (e2e)', () => {
       height: 180,
       startWeight: 80,
       startFatMass: 20,
-      goal: 'Похудение',
+      goal: null,
+      goalText: 'Похудение',
       currentWeight: null,
       currentFatMass: null,
       active_trainers: [],
@@ -229,7 +243,8 @@ describe('Clients, Trainers and links (e2e)', () => {
     expect(response.body).toMatchObject({
       id: clientId,
       name: 'E2E Клиент Обновлён',
-      goal: 'Масса',
+      goal: null,
+      goalText: 'Масса',
       height: 181,
       startWeight: 80,
     });

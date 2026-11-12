@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -62,6 +63,17 @@ export class EquipmentService {
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
+
+    const [templateItemCount, workoutItemCount] = await Promise.all([
+      this.prisma.workoutTemplateItem.count({ where: { equipmentId: id } }),
+      this.prisma.workoutItem.count({ where: { equipmentId: id } }),
+    ]);
+
+    if (templateItemCount > 0 || workoutItemCount > 0) {
+      throw new ConflictException(
+        'Equipment is used in workouts and cannot be deleted',
+      );
+    }
 
     await this.prisma.gymEquipment.delete({ where: { id } });
   }

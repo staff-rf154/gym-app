@@ -14,17 +14,33 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Role } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { Server, Socket } from 'socket.io';
 import { Subscription } from 'rxjs';
 import { ChatEvents } from './chat-events.service';
 import { ChatsService } from './chats.service';
+import { SendMessageDto } from './dto/message.dto';
 
 interface JwtPayload {
   sub: string;
   role: Role;
 }
 
-@WebSocketGateway({ namespace: '/chat', cors: { origin: '*' } })
+const WS_SEND_WINDOW_MS = 10_000;
+const WS_SEND_LIMIT = 20;
+
+function getWsOrigins(): string[] {
+  return (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://127.0.0.1:3000')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+@WebSocketGateway({
+  namespace: '/chat',
+  cors: { origin: getWsOrigins(), credentials: true },
+})
 export class ChatGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
 {
@@ -32,6 +48,8 @@ export class ChatGateway
   server!: Server;
 
   private subscription?: Subscription;
+
+  private readonly sendTimestamps = new Map<string, number[]>();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -58,6 +76,7 @@ export class ChatGateway
     try {
       const payload = this.jwtService.verify<JwtPayload>(token, {
         secret: this.configService.getOrThrow<string>('JWT_SECRET'),
+        algorithms: ['HS256'],
       });
 
       client.data.userId = payload.sub;
@@ -68,7 +87,8 @@ export class ChatGateway
     }
   }
 
-  handleDisconnect(): void {
+  handleDisconnect(client: Socket): void {
+    this.sendTimestamps.delete(client.id);
     // Socket.IO removes the client from all rooms automatically.
   }
 
@@ -114,13 +134,24 @@ export class ChatGateway
   ) {
     const userId = client.data.userId as string | undefined;
 
-    if (!userId || !body?.chatId || !body.text?.trim()) {
+    if (!userId || !body?.chatId) {
+      return { ok: false };
+    }
+
+    const dto = plainToInstance(SendMessageDto, { text: body.text });
+    const errors = await validate(dto);
+
+    if (errors.length > 0) {
+      return { ok: false };
+    }
+
+    if (!this.allowSend(client.id)) {
       return { ok: false };
     }
 
     try {
       const message = await this.chatsService.sendMessage(userId, body.chatId, {
-        text: body.text,
+        text: dto.text,
       });
 
       return { ok: true, message };
@@ -129,18 +160,25 @@ export class ChatGateway
     }
   }
 
+  private allowSend(socketId: string): boolean {
+    const now = Date.now();
+    const timestamps = (this.sendTimestamps.get(socketId) ?? []).filter(
+      (timestamp) => now - timestamp < WS_SEND_WINDOW_MS,
+    );
+
+    if (timestamps.length >= WS_SEND_LIMIT) {
+      this.sendTimestamps.set(socketId, timestamps);
+      return false;
+    }
+
+    timestamps.push(now);
+    this.sendTimestamps.set(socketId, timestamps);
+    return true;
+  }
+
   private extractToken(client: Socket): string {
     const authToken = client.handshake.auth?.token;
-    const queryToken = client.handshake.query?.token;
 
-    if (typeof authToken === 'string') {
-      return authToken;
-    }
-
-    if (typeof queryToken === 'string') {
-      return queryToken;
-    }
-
-    return '';
+    return typeof authToken === 'string' ? authToken : '';
   }
 }

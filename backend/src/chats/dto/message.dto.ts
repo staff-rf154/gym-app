@@ -6,14 +6,16 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
 
 export class SendMessageDto {
-  @ApiProperty({ minLength: 1 })
+  @ApiProperty({ minLength: 1, maxLength: 4000 })
   @IsString()
   @MinLength(1)
+  @MaxLength(4000)
   text!: string;
 }
 

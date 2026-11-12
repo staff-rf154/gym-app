@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/push/push_service.dart';
 import '../auth/models.dart';
 import '../chats/chats_screen.dart';
 import '../settings/settings_screen.dart';
@@ -9,20 +10,47 @@ import '../templates/templates_screen.dart';
 import 'client_card_screen.dart';
 import 'clients_providers.dart';
 import 'trainer_client.dart';
+import 'trainer_workouts_screen.dart';
 
-class ClientsScreen extends ConsumerWidget {
+class ClientsScreen extends ConsumerStatefulWidget {
   const ClientsScreen({super.key, required this.user});
 
   final UserProfile user;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ClientsScreen> createState() => _ClientsScreenState();
+}
+
+class _ClientsScreenState extends ConsumerState<ClientsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    initClientPush(ref);
+  }
+
+  @override
+  void dispose() {
+    disposeClientPush();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final clients = ref.watch(myClientsProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Мои клиенты'),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const TrainerWorkoutsScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.fitness_center),
+            tooltip: 'Тренировки на сегодня',
+          ),
           IconButton(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const ChatsScreen()),

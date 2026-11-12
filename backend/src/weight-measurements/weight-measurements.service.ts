@@ -30,6 +30,33 @@ export class WeightMeasurementsService {
   ): Promise<WeightMeasurement> {
     await this.ensureTrainerLinkedToClient(userId, clientId);
 
+    return this.createMeasurement(userId, clientId, dto);
+  }
+
+  async findAllForAdmin(clientId: string): Promise<WeightMeasurement[]> {
+    await this.ensureClient(clientId);
+
+    return this.prisma.weightMeasurement.findMany({
+      where: { clientId },
+      orderBy: { measuredAt: 'desc' },
+    });
+  }
+
+  async createForAdmin(
+    userId: string,
+    clientId: string,
+    dto: CreateWeightMeasurementDto,
+  ): Promise<WeightMeasurement> {
+    await this.ensureClient(clientId);
+
+    return this.createMeasurement(userId, clientId, dto);
+  }
+
+  private createMeasurement(
+    userId: string,
+    clientId: string,
+    dto: CreateWeightMeasurementDto,
+  ): Promise<WeightMeasurement> {
     return this.prisma.weightMeasurement.create({
       data: {
         clientId,
@@ -40,6 +67,16 @@ export class WeightMeasurementsService {
         comment: dto.comment,
       },
     });
+  }
+
+  private async ensureClient(clientId: string): Promise<void> {
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+    });
+
+    if (!client) {
+      throw new NotFoundException('Client not found');
+    }
   }
 
   private async ensureTrainerLinkedToClient(

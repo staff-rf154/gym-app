@@ -1,9 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsString, Min } from 'class-validator';
+import { IsNumber, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateFoodProductDto {
   @ApiProperty({ example: 'Куриная грудка' })
   @IsString()
+  @MaxLength(100)
   name!: string;
 
   @ApiProperty({ example: 165, minimum: 0 })

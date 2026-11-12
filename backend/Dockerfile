@@ -1,4 +1,5 @@
 FROM node:20-alpine AS base
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 RUN npm install -g pnpm@9
 WORKDIR /app
 
@@ -15,6 +16,7 @@ RUN npx prisma generate
 RUN pnpm build
 
 FROM node:20-alpine AS runtime
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 RUN npm install -g pnpm@9
 ENV NODE_ENV=production
 WORKDIR /app

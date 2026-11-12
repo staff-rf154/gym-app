@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Matches } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsUUID, Matches } from 'class-validator';
 
 export class ClientWorkoutsQueryDto {
   @ApiProperty({ example: '2026-11-01', format: 'date' })
@@ -13,4 +13,9 @@ export class ClientWorkoutsQueryDto {
     message: 'to must be in YYYY-MM-DD format',
   })
   to!: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  gym_id?: string;
 }

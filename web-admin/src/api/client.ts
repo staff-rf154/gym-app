@@ -12,6 +12,7 @@ interface RefreshResponse {
 
 const api = axios.create({
   baseURL: '/api/v1',
+  withCredentials: true,
 });
 
 let refreshPromise: Promise<string> | null = null;
@@ -21,6 +22,26 @@ const redirectToLogin = () => {
     window.location.assign('/login');
   }
 };
+
+export function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post<RefreshResponse>(
+        '/api/v1/auth/refresh',
+        {},
+        { withCredentials: true },
+      )
+      .then(({ data }) => {
+        useAuthStore.getState().setAccess(data.access_token);
+        return data.access_token;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+}
 
 api.interceptors.request.use((config) => {
   const access = useAuthStore.getState().access;
@@ -51,32 +72,8 @@ api.interceptors.response.use(
 
     original._retry = true;
 
-    const refresh = useAuthStore.getState().refresh;
-
-    if (!refresh) {
-      useAuthStore.getState().logout();
-      redirectToLogin();
-      return Promise.reject(error);
-    }
-
     try {
-      if (!refreshPromise) {
-        refreshPromise = axios
-          .post<RefreshResponse>('/api/v1/auth/refresh', {
-            refresh_token: refresh,
-          })
-          .then(({ data }) => {
-            useAuthStore
-              .getState()
-              .setTokens(data.access_token, data.refresh_token);
-            return data.access_token;
-          })
-          .finally(() => {
-            refreshPromise = null;
-          });
-      }
-
-      const access = await refreshPromise;
+      const access = await refreshAccessToken();
       original.headers.Authorization = `Bearer ${access}`;
       return api(original);
     } catch (refreshError) {

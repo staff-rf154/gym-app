@@ -1,7 +1,8 @@
-import { useState } from 'react';
 import {
+  Alert,
   Button,
   DatePicker,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -17,6 +18,7 @@ import dayjs from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '../../api/client';
+import { useCrudModal } from '../../hooks/useCrudModal';
 
 interface WeightMeasurement {
   id: string;
@@ -45,16 +47,21 @@ export default function ClientWeightPage() {
   const navigate = useNavigate();
   const [form] = Form.useForm<MeasurementFormValues>();
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { open: isModalOpen, openCreate, close } = useCrudModal<WeightMeasurement>();
 
   const clientName = (location.state as { name?: string } | null)?.name;
 
-  const { data: measurements = [], isLoading } = useQuery({
+  const {
+    data: measurements = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['weight-measurements', id],
     enabled: Boolean(id),
     queryFn: async () => {
       const { data } = await api.get<WeightMeasurement[]>(
-        `/client/${id}/weight-measurements`,
+        `/admin/clients/${id}/weight-measurements`,
       );
       return data;
     },
@@ -63,12 +70,12 @@ export default function ClientWeightPage() {
   const createMutation = useMutation({
     mutationFn: async (values: MeasurementFormValues) => {
       const { data } = await api.post<WeightMeasurement>(
-        `/client/${id}/weight-measurements`,
+        `/admin/clients/${id}/weight-measurements`,
         {
           weight: values.weight,
-          fatMass: values.fatMass ?? undefined,
+          fatMass: values.fatMass ?? null,
           measuredAt: values.measuredAt.toISOString(),
-          comment: values.comment || undefined,
+          comment: values.comment?.trim() ? values.comment : null,
         },
       );
       return data;
@@ -78,7 +85,7 @@ export default function ClientWeightPage() {
         queryKey: ['weight-measurements', id],
       });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
-      setIsModalOpen(false);
+      close();
       form.resetFields();
       message.success('Замер добавлен');
     },
@@ -88,11 +95,11 @@ export default function ClientWeightPage() {
   const openCreateModal = () => {
     form.resetFields();
     form.setFieldsValue({ measuredAt: dayjs() });
-    setIsModalOpen(true);
+    openCreate();
   };
 
   const closeModal = () => {
-    setIsModalOpen(false);
+    close();
     form.resetFields();
   };
 
@@ -135,13 +142,30 @@ export default function ClientWeightPage() {
         Добавить замер
       </Button>
 
-      <Table<WeightMeasurement>
-        rowKey="id"
-        columns={columns}
-        dataSource={measurements}
-        loading={isLoading}
-        pagination={false}
-      />
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить замеры"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && measurements.length === 0 ? (
+        <Empty description="Замеров пока нет" />
+      ) : (
+        <Table<WeightMeasurement>
+          rowKey="id"
+          columns={columns}
+          dataSource={measurements}
+          loading={isLoading}
+          pagination={false}
+        />
+      )}
 
       <Modal
         title="Новый замер"

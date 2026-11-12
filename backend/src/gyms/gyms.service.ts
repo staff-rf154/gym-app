@@ -39,12 +39,31 @@ export class GymsService {
   async remove(id: string): Promise<void> {
     await this.findOne(id);
 
-    const equipmentCount = await this.prisma.gymEquipment.count({
-      where: { gymId: id },
-    });
+    const [
+      equipmentCount,
+      trainerGymCount,
+      clientGymCount,
+      clientTrainerCount,
+      workoutCount,
+      notificationCount,
+    ] = await Promise.all([
+      this.prisma.gymEquipment.count({ where: { gymId: id } }),
+      this.prisma.trainerGym.count({ where: { gymId: id } }),
+      this.prisma.clientGym.count({ where: { gymId: id } }),
+      this.prisma.clientTrainer.count({ where: { gymId: id } }),
+      this.prisma.workout.count({ where: { gymId: id } }),
+      this.prisma.notification.count({ where: { gymId: id } }),
+    ]);
 
-    if (equipmentCount > 0) {
-      throw new ConflictException('Gym has equipment and cannot be deleted');
+    if (
+      equipmentCount > 0 ||
+      trainerGymCount > 0 ||
+      clientGymCount > 0 ||
+      clientTrainerCount > 0 ||
+      workoutCount > 0 ||
+      notificationCount > 0
+    ) {
+      throw new ConflictException('Gym has related records and cannot be deleted');
     }
 
     await this.prisma.gym.delete({ where: { id } });

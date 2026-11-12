@@ -10,22 +10,37 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTrainerDto } from './dto/create-trainer.dto';
 import { UpdateTrainerDto } from './dto/update-trainer.dto';
 
-const BCRYPT_ROUNDS = 10;
+const BCRYPT_ROUNDS = 12;
 const FALLBACK_PASSWORD = 'ChangeMe123!';
 
 const trainerInclude = {
   user: true,
+  trainerGyms: {
+    where: { isActive: true },
+    include: { gym: true },
+    orderBy: { createdAt: 'asc' },
+  },
 } satisfies Prisma.TrainerInclude;
 
 type TrainerWithUser = Prisma.TrainerGetPayload<{
   include: typeof trainerInclude;
 }>;
 
+export interface TrainerGymResponse {
+  id: string;
+  gymId: string;
+  gymName: string;
+  gymAddress: string;
+  isActive: boolean;
+}
+
 export interface TrainerResponse {
   id: string;
   userId: string;
   phone: string;
   name: string;
+  photoUrl: string | null;
+  gyms: TrainerGymResponse[];
 }
 
 export interface CreateTrainerResponse extends TrainerResponse {
@@ -48,7 +63,10 @@ export class TrainersService {
     return trainers.map((trainer) => this.toResponse(trainer));
   }
 
-  async create(dto: CreateTrainerDto): Promise<CreateTrainerResponse> {
+  async create(
+    dto: CreateTrainerDto,
+    options?: { gymId?: string },
+  ): Promise<CreateTrainerResponse> {
     await this.ensurePhoneAvailable(dto.phone);
 
     const initialPassword = this.getInitialPassword();
@@ -65,7 +83,17 @@ export class TrainersService {
           },
         });
 
-        return tx.trainer.create({ data: { userId: user.id } });
+        const trainer = await tx.trainer.create({
+          data: { userId: user.id, photoUrl: dto.photoUrl },
+        });
+
+        if (options?.gymId) {
+          await tx.trainerGym.create({
+            data: { trainerId: trainer.id, gymId: options.gymId },
+          });
+        }
+
+        return trainer;
       });
 
       const created = await this.findEntity(trainer.id);
@@ -96,6 +124,12 @@ export class TrainersService {
           name: dto.name,
         },
       });
+      if (dto.photoUrl !== undefined) {
+        await this.prisma.trainer.update({
+          where: { id },
+          data: { photoUrl: dto.photoUrl },
+        });
+      }
     } catch (error) {
       this.rethrowUniquePhone(error);
       throw error;
@@ -110,7 +144,41 @@ export class TrainersService {
     const trainer = await this.findEntity(id);
 
     await this.prisma.$transaction(async (tx) => {
+      const chats = await tx.chat.findMany({
+        where: { trainerId: id },
+        select: { id: true },
+      });
+      await tx.message.deleteMany({
+        where: { chatId: { in: chats.map((chat) => chat.id) } },
+      });
+      await tx.chat.deleteMany({ where: { trainerId: id } });
+      await tx.workoutItemResult.deleteMany({
+        where: { item: { workout: { trainerId: id } } },
+      });
+      await tx.workoutItem.deleteMany({
+        where: { workout: { trainerId: id } },
+      });
+      await tx.workout.deleteMany({ where: { trainerId: id } });
+      await tx.workoutTemplateItem.deleteMany({
+        where: { template: { trainerId: id } },
+      });
+      await tx.workoutTemplate.deleteMany({ where: { trainerId: id } });
+      await tx.nutritionRecommendation.deleteMany({ where: { trainerId: id } });
+      await tx.weightMeasurement.deleteMany({
+        where: { measuredBy: trainer.userId },
+      });
+      await tx.notificationRecipient.deleteMany({
+        where: { userId: trainer.userId },
+      });
+      await tx.notificationRecipient.deleteMany({
+        where: { notification: { senderId: trainer.userId } },
+      });
+      await tx.notification.deleteMany({
+        where: { senderId: trainer.userId },
+      });
+      await tx.refreshToken.deleteMany({ where: { userId: trainer.userId } });
       await tx.clientTrainer.deleteMany({ where: { trainerId: id } });
+      await tx.trainerGym.deleteMany({ where: { trainerId: id } });
       await tx.trainer.delete({ where: { id } });
       await tx.user.delete({ where: { id: trainer.userId } });
     });
@@ -135,6 +203,14 @@ export class TrainersService {
       userId: trainer.userId,
       phone: trainer.user.phone,
       name: trainer.user.name,
+      photoUrl: trainer.photoUrl,
+      gyms: trainer.trainerGyms.map((link) => ({
+        id: link.id,
+        gymId: link.gymId,
+        gymName: link.gym.name,
+        gymAddress: link.gym.address,
+        isActive: link.isActive,
+      })),
     };
   }
 

@@ -19,8 +19,9 @@ interface LoginResponse {
 
 export default function Login() {
   const navigate = useNavigate();
-  const setTokens = useAuthStore((state) => state.setTokens);
+  const setAccess = useAuthStore((state) => state.setAccess);
   const setUser = useAuthStore((state) => state.setUser);
+  const logout = useAuthStore((state) => state.logout);
   const [loading, setLoading] = useState(false);
 
   const handleFinish = async (values: LoginFormValues) => {
@@ -28,9 +29,16 @@ export default function Login() {
 
     try {
       const { data } = await api.post<LoginResponse>('/auth/login', values);
-      setTokens(data.access_token, data.refresh_token);
+      setAccess(data.access_token);
 
       const me = await api.get<AuthUser>('/auth/me');
+
+      if (me.data.role !== 'ADMIN' && me.data.role !== 'RECEPTION') {
+        logout();
+        message.error('Доступ только для администраторов и ресепшена');
+        return;
+      }
+
       setUser(me.data);
 
       navigate('/');

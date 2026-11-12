@@ -135,12 +135,22 @@ describe('Chat WebSocket (e2e)', () => {
     await prisma.chat.deleteMany({
       where: { OR: [{ client: { user: { phone: { in: PHONES } } } }, { trainer: { user: { phone: { in: PHONES } } } }] },
     });
+    await prisma.clientTrainer.deleteMany({
+      where: { OR: [{ client: { user: { phone: { in: PHONES } } } }, { trainer: { user: { phone: { in: PHONES } } } }] },
+    });
+    await prisma.clientGym.deleteMany({
+      where: { client: { user: { phone: { in: PHONES } } } },
+    });
+    await prisma.trainerGym.deleteMany({
+      where: { trainer: { user: { phone: { in: PHONES } } } },
+    });
     await prisma.client.deleteMany({
       where: { user: { phone: { in: PHONES } } },
     });
     await prisma.trainer.deleteMany({
       where: { user: { phone: { in: PHONES } } },
     });
+    await prisma.gym.deleteMany({ where: { name: 'E2E Chat WS Gym' } });
     await prisma.refreshToken.deleteMany({
       where: { user: { phone: { in: PHONES } } },
     });
@@ -187,6 +197,19 @@ describe('Chat WebSocket (e2e)', () => {
       await prisma.client.create({ data: { userId: otherClientUser.id } })
     ).id;
 
+    const gym = await prisma.gym.create({
+      data: { name: 'E2E Chat WS Gym', address: 'ул. Чатовая, 1' },
+    });
+    await prisma.trainerGym.create({
+      data: { trainerId, gymId: gym.id },
+    });
+    await prisma.clientGym.create({
+      data: { clientId, gymId: gym.id },
+    });
+    await prisma.clientTrainer.create({
+      data: { clientId, trainerId, gymId: gym.id },
+    });
+
     chatId = (
       await prisma.chat.create({
         data: { type: 'CLIENT_TRAINER', clientId, trainerId },
@@ -218,10 +241,14 @@ describe('Chat WebSocket (e2e)', () => {
     await prisma.chat.deleteMany({
       where: { id: { in: [chatId, foreignChatId] } },
     });
+    await prisma.clientTrainer.deleteMany({ where: { clientId } });
+    await prisma.clientGym.deleteMany({ where: { clientId } });
+    await prisma.trainerGym.deleteMany({ where: { trainerId } });
     await prisma.client.deleteMany({
       where: { id: { in: [clientId, otherClientId] } },
     });
     await prisma.trainer.deleteMany({ where: { id: trainerId } });
+    await prisma.gym.deleteMany({ where: { name: 'E2E Chat WS Gym' } });
     await prisma.refreshToken.deleteMany({
       where: { user: { phone: { in: PHONES } } },
     });

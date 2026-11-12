@@ -1,4 +1,5 @@
 import '../../core/api/dio_client.dart';
+import '../client/client_workout_models.dart';
 import 'workout_models.dart';
 
 class WorkoutsApi {
@@ -7,7 +8,7 @@ class WorkoutsApi {
   final ApiClient _api;
 
   Future<List<Gym>> fetchGyms() async {
-    final response = await _api.dio.get<List<dynamic>>('/gyms');
+    final response = await _api.dio.get<List<dynamic>>('/trainer/gyms');
     return (response.data ?? [])
         .map((item) => Gym.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -18,6 +19,67 @@ class WorkoutsApi {
     return (response.data ?? [])
         .map((item) => Exercise.fromJson(item as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<List<GymEquipment>> fetchGymEquipment(String gymId) async {
+    final response = await _api.dio.get<List<dynamic>>(
+      '/gyms/$gymId/equipment',
+    );
+    return (response.data ?? [])
+        .map((item) => GymEquipment.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<ClientWorkout>> fetchTrainerWorkouts({
+    String? clientId,
+    String? gymId,
+    String? from,
+    String? to,
+  }) async {
+    final response = await _api.dio.get<List<dynamic>>(
+      '/trainer/workouts',
+      queryParameters: {
+        if (clientId != null && clientId.isNotEmpty) 'client_id': clientId,
+        if (gymId != null && gymId.isNotEmpty) 'gym_id': gymId,
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+      },
+    );
+    return (response.data ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(ClientWorkout.fromJson)
+        .toList();
+  }
+
+  Future<ClientWorkout> fetchTrainerWorkout(String id) async {
+    final response = await _api.dio.get<Map<String, dynamic>>(
+      '/trainer/workouts/$id',
+    );
+    return ClientWorkout.fromJson(response.data!);
+  }
+
+  Future<ClientWorkout> startTrainerWorkout(String id) async {
+    final response = await _api.dio.post<Map<String, dynamic>>(
+      '/trainer/workouts/$id/start',
+    );
+    return ClientWorkout.fromJson(response.data!);
+  }
+
+  Future<ClientWorkout> finishTrainerWorkout(String id) async {
+    final response = await _api.dio.post<Map<String, dynamic>>(
+      '/trainer/workouts/$id/finish',
+    );
+    return ClientWorkout.fromJson(response.data!);
+  }
+
+  Future<void> saveTrainerItemResult(
+    String itemId,
+    WorkoutItemResultInput input,
+  ) async {
+    await _api.dio.put<void>(
+      '/trainer/workout-items/$itemId/result',
+      data: input.toJson(),
+    );
   }
 
   Future<List<WorkoutTemplate>> fetchTemplates() async {
@@ -82,6 +144,28 @@ class WorkoutsApi {
         'date': date,
         'template_id': ?templateId,
         if (comment != null && comment.isNotEmpty) 'comment': comment,
+        'items': items.map((item) => item.toJson()).toList(),
+      },
+    );
+  }
+
+  Future<void> updateWorkout({
+    required String id,
+    required String clientId,
+    required String gymId,
+    required String date,
+    required List<WorkoutItemInput> items,
+    String? templateId,
+    String? comment,
+  }) async {
+    await _api.dio.put<Map<String, dynamic>>(
+      '/trainer/workouts/$id',
+      data: {
+        'client_id': clientId,
+        'gym_id': gymId,
+        'date': date,
+        'template_id': templateId,
+        'comment': comment == null || comment.isEmpty ? null : comment,
         'items': items.map((item) => item.toJson()).toList(),
       },
     );

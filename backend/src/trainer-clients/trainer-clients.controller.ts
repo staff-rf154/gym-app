@@ -1,8 +1,9 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { TrainerClientsQueryDto } from './dto/trainer-clients-query.dto';
 import {
   TrainerClientResponse,
   TrainerClientsService,
@@ -19,7 +20,8 @@ export class TrainerClientsController {
   @ApiOperation({ summary: 'Мои клиенты (активная связь)' })
   findAll(
     @CurrentUser('userId') userId: string,
+    @Query() query: TrainerClientsQueryDto,
   ): Promise<TrainerClientResponse[]> {
-    return this.trainerClientsService.findAll(userId);
+    return this.trainerClientsService.findAll(userId, query.gym_id);
   }
 }

@@ -6,18 +6,28 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
 export class CreateClientDto {
   @ApiProperty({ example: '+79990000010' })
   @IsString()
+  @MaxLength(20)
   phone!: string;
 
   @ApiProperty({ example: 'Иван Иванов' })
   @IsString()
+  @MaxLength(100)
   name!: string;
+
+  @ApiPropertyOptional({ example: '/uploads/client.jpg' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  photoUrl?: string;
 
   @ApiPropertyOptional({ enum: Gender })
   @IsOptional()
@@ -48,13 +58,20 @@ export class CreateClientDto {
   @Max(100)
   startFatMass?: number;
 
-  @ApiPropertyOptional({ example: 'Похудение' })
+  @ApiPropertyOptional({ example: 'Похудение', deprecated: true })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   goal?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'ID цели из справочника' })
+  @IsOptional()
+  @IsUUID()
+  goalId?: string;
 
   @ApiPropertyOptional({ example: 'Травма колена в анамнезе' })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   notes?: string;
 }

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientWorkoutsQueryDto } from './dto/client-workouts-query.dto';
+import { TrainerWorkoutsQueryDto } from './dto/trainer-workouts-query.dto';
 import { CreateWorkoutTemplateDto } from './dto/create-workout-template.dto';
 import { CreateWorkoutDto } from './dto/create-workout.dto';
 import { UpdateWorkoutItemResultDto } from './dto/update-workout-item-result.dto';
@@ -23,6 +25,8 @@ const workoutItemInclude = {
 } satisfies Prisma.WorkoutItemInclude;
 
 const workoutInclude = {
+  client: { include: { user: true } },
+  gym: true,
   items: {
     include: workoutItemInclude,
     orderBy: { order: 'asc' },
@@ -52,8 +56,10 @@ export interface WorkoutItemResponse {
 export interface WorkoutResponse {
   id: string;
   clientId: string;
+  clientName: string;
   trainerId: string;
   gymId: string;
+  gymName: string;
   date: string;
   status: WorkoutStatus;
   comment: string | null;
@@ -116,7 +122,7 @@ export class WorkoutsService {
     dto: CreateWorkoutTemplateDto,
   ): Promise<WorkoutTemplateResponse> {
     const trainer = await this.getTrainer(userId);
-    await this.assertItems(dto.items);
+    await this.assertItems(dto.items, undefined, trainer.id);
 
     const template = await this.prisma.workoutTemplate.create({
       data: {
@@ -140,7 +146,7 @@ export class WorkoutsService {
     await this.findTemplateEntity(trainer.id, id);
 
     if (dto.items) {
-      await this.assertItems(dto.items);
+      await this.assertItems(dto.items, undefined, trainer.id);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -179,9 +185,9 @@ export class WorkoutsService {
     dto: CreateWorkoutDto,
   ): Promise<WorkoutResponse> {
     const trainer = await this.getTrainer(userId);
-    await this.assertActiveLink(trainer.id, dto.client_id);
+    await this.assertActiveLink(trainer.id, dto.client_id, dto.gym_id);
     await this.assertGym(dto.gym_id);
-    await this.assertItems(dto.items);
+    await this.assertItems(dto.items, dto.gym_id);
 
     if (dto.template_id) {
       await this.assertTemplateOwned(trainer.id, dto.template_id);
@@ -212,16 +218,30 @@ export class WorkoutsService {
     const trainer = await this.getTrainer(userId);
     const workout = await this.prisma.workout.findUnique({
       where: { id },
-      select: { id: true, trainerId: true, trainer: { select: { userId: true } } },
+      select: {
+        id: true,
+        trainerId: true,
+        status: true,
+        trainer: { select: { userId: true } },
+      },
     });
 
     if (!workout || workout.trainer.userId !== userId) {
       throw new NotFoundException('Workout not found');
     }
 
-    await this.assertActiveLink(trainer.id, dto.client_id);
+    if (
+      workout.status === WorkoutStatus.DONE ||
+      workout.status === WorkoutStatus.SKIPPED
+    ) {
+      throw new ConflictException(
+        'Результаты завершённой тренировки изменять нельзя',
+      );
+    }
+
+    await this.assertActiveLink(trainer.id, dto.client_id, dto.gym_id);
     await this.assertGym(dto.gym_id);
-    await this.assertItems(dto.items);
+    await this.assertItems(dto.items, dto.gym_id);
 
     if (dto.template_id) {
       await this.assertTemplateOwned(trainer.id, dto.template_id);
@@ -250,6 +270,49 @@ export class WorkoutsService {
     return this.findOneWorkoutResponse(id);
   }
 
+  async trainerWorkouts(
+    userId: string,
+    query: TrainerWorkoutsQueryDto,
+  ): Promise<WorkoutResponse[]> {
+    const trainer = await this.getTrainer(userId);
+    const where: Prisma.WorkoutWhereInput = { trainerId: trainer.id };
+
+    if (query.client_id) {
+      where.clientId = query.client_id;
+    }
+    if (query.gym_id) {
+      where.gymId = query.gym_id;
+    }
+    if (query.from || query.to) {
+      where.date = {
+        ...(query.from ? { gte: parseDate(query.from) } : {}),
+        ...(query.to ? { lte: parseDate(query.to) } : {}),
+      };
+    }
+
+    const workouts = await this.prisma.workout.findMany({
+      where,
+      include: workoutInclude,
+      orderBy: { date: 'desc' },
+    });
+
+    return workouts.map((workout) => this.toWorkoutResponse(workout));
+  }
+
+  async trainerWorkout(userId: string, id: string): Promise<WorkoutResponse> {
+    const trainer = await this.getTrainer(userId);
+    const workout = await this.prisma.workout.findFirst({
+      where: { id, trainerId: trainer.id },
+      include: workoutInclude,
+    });
+
+    if (!workout) {
+      throw new NotFoundException('Workout not found');
+    }
+
+    return this.toWorkoutResponse(workout);
+  }
+
   async clientWorkouts(
     userId: string,
     query: ClientWorkoutsQueryDto,
@@ -263,7 +326,11 @@ export class WorkoutsService {
     }
 
     const workouts = await this.prisma.workout.findMany({
-      where: { clientId: client.id, date: { gte: from, lte: to } },
+      where: {
+        clientId: client.id,
+        date: { gte: from, lte: to },
+        ...(query.gym_id ? { gymId: query.gym_id } : {}),
+      },
       include: workoutInclude,
       orderBy: { date: 'asc' },
     });
@@ -289,6 +356,136 @@ export class WorkoutsService {
     return this.toWorkoutResponse(workout);
   }
 
+  async startWorkout(userId: string, id: string): Promise<WorkoutResponse> {
+    const client = await this.getClient(userId);
+    const workout = await this.prisma.workout.findUnique({
+      where: { id },
+      select: { id: true, clientId: true, status: true },
+    });
+
+    if (!workout) {
+      throw new NotFoundException('Workout not found');
+    }
+
+    if (workout.clientId !== client.id) {
+      throw new ForbiddenException('Workout belongs to another client');
+    }
+
+    if (workout.status !== WorkoutStatus.PLANNED) {
+      throw new ConflictException(
+        workout.status === WorkoutStatus.IN_PROGRESS
+          ? 'Тренировка уже начата'
+          : 'Завершённую тренировку нельзя начать',
+      );
+    }
+
+    const updated = await this.prisma.workout.updateMany({
+      where: {
+        id,
+        clientId: client.id,
+        status: WorkoutStatus.PLANNED,
+      },
+      data: { status: WorkoutStatus.IN_PROGRESS },
+    });
+
+    if (updated.count === 0) {
+      throw new ConflictException('Тренировка уже начата');
+    }
+
+    return this.findOneWorkoutResponse(id);
+  }
+
+  async finishWorkout(userId: string, id: string): Promise<WorkoutResponse> {
+    const client = await this.getClient(userId);
+    const workout = await this.prisma.workout.findUnique({
+      where: { id },
+      select: { id: true, clientId: true, status: true },
+    });
+
+    if (!workout) {
+      throw new NotFoundException('Workout not found');
+    }
+
+    if (workout.clientId !== client.id) {
+      throw new ForbiddenException('Workout belongs to another client');
+    }
+
+    if (workout.status !== WorkoutStatus.IN_PROGRESS) {
+      throw new ConflictException(
+        workout.status === WorkoutStatus.PLANNED
+          ? 'Сначала начните тренировку'
+          : 'Тренировка уже завершена',
+      );
+    }
+
+    const updated = await this.prisma.workout.updateMany({
+      where: {
+        id,
+        clientId: client.id,
+        status: WorkoutStatus.IN_PROGRESS,
+      },
+      data: { status: WorkoutStatus.DONE },
+    });
+
+    if (updated.count === 0) {
+      throw new ConflictException('Тренировка уже завершена');
+    }
+
+    return this.findOneWorkoutResponse(id);
+  }
+
+  async trainerStartWorkout(
+    userId: string,
+    id: string,
+  ): Promise<WorkoutResponse> {
+    const trainer = await this.getTrainer(userId);
+    const workout = await this.findTrainerWorkoutForTransition(trainer.id, id);
+    await this.assertActiveLink(trainer.id, workout.clientId, workout.gymId);
+
+    if (workout.status !== WorkoutStatus.PLANNED) {
+      throw new ConflictException(
+        workout.status === WorkoutStatus.IN_PROGRESS
+          ? 'Тренировка уже начата'
+          : 'Завершённую тренировку нельзя начать',
+      );
+    }
+
+    await this.transitionWorkout(
+      { id, trainerId: trainer.id },
+      WorkoutStatus.PLANNED,
+      WorkoutStatus.IN_PROGRESS,
+      'Тренировка уже начата',
+    );
+
+    return this.findOneWorkoutResponse(id);
+  }
+
+  async trainerFinishWorkout(
+    userId: string,
+    id: string,
+  ): Promise<WorkoutResponse> {
+    const trainer = await this.getTrainer(userId);
+    const workout = await this.findTrainerWorkoutForTransition(trainer.id, id);
+    await this.assertActiveLink(trainer.id, workout.clientId, workout.gymId);
+
+    if (workout.status !== WorkoutStatus.IN_PROGRESS) {
+      throw new ConflictException(
+        workout.status === WorkoutStatus.PLANNED
+          ? 'Сначала начните тренировку'
+          : 'Тренировка уже завершена',
+      );
+    }
+
+    await this.transitionWorkout(
+      { id, trainerId: trainer.id },
+      WorkoutStatus.IN_PROGRESS,
+      WorkoutStatus.DONE,
+      'Тренировка уже завершена',
+    );
+
+    return this.findOneWorkoutResponse(id);
+  }
+
   async updateItemResult(
     userId: string,
     itemId: string,
@@ -297,7 +494,10 @@ export class WorkoutsService {
     const client = await this.getClient(userId);
     const item = await this.prisma.workoutItem.findUnique({
       where: { id: itemId },
-      select: { id: true, workout: { select: { clientId: true } } },
+      select: {
+        id: true,
+        workout: { select: { clientId: true, status: true } },
+      },
     });
 
     if (!item) {
@@ -308,6 +508,99 @@ export class WorkoutsService {
       throw new ForbiddenException('Workout item belongs to another client');
     }
 
+    this.assertResultEditable(item.workout.status);
+
+    return this.upsertItemResult(itemId, dto);
+  }
+
+  async updateTrainerItemResult(
+    userId: string,
+    itemId: string,
+    dto: UpdateWorkoutItemResultDto,
+  ) {
+    const trainer = await this.getTrainer(userId);
+    const item = await this.prisma.workoutItem.findUnique({
+      where: { id: itemId },
+      select: {
+        id: true,
+        workout: {
+          select: { trainerId: true, clientId: true, gymId: true, status: true },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Workout item not found');
+    }
+
+    if (item.workout.trainerId !== trainer.id) {
+      throw new ForbiddenException('Workout item belongs to another trainer');
+    }
+
+    await this.assertActiveLink(trainer.id, item.workout.clientId, item.workout.gymId);
+    this.assertResultEditable(item.workout.status);
+
+    return this.upsertItemResult(itemId, dto);
+  }
+
+  private async findTrainerWorkoutForTransition(trainerId: string, id: string) {
+    const workout = await this.prisma.workout.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        trainerId: true,
+        clientId: true,
+        gymId: true,
+        status: true,
+      },
+    });
+
+    if (!workout) {
+      throw new NotFoundException('Workout not found');
+    }
+
+    if (workout.trainerId !== trainerId) {
+      throw new ForbiddenException('Workout belongs to another trainer');
+    }
+
+    return workout;
+  }
+
+  private async transitionWorkout(
+    where: Prisma.WorkoutWhereInput,
+    expected: WorkoutStatus,
+    next: WorkoutStatus,
+    conflictMessage: string,
+  ): Promise<void> {
+    const updated = await this.prisma.workout.updateMany({
+      where: { ...where, status: expected },
+      data: { status: next },
+    });
+
+    if (updated.count === 0) {
+      throw new ConflictException(conflictMessage);
+    }
+  }
+
+  private assertResultEditable(status: WorkoutStatus): void {
+    if (status === WorkoutStatus.PLANNED) {
+      throw new ConflictException('Сначала начните тренировку');
+    }
+
+    if (
+      status === WorkoutStatus.DONE ||
+      status === WorkoutStatus.SKIPPED
+    ) {
+      throw new ConflictException(
+        'Результаты завершённой тренировки изменять нельзя',
+      );
+    }
+  }
+
+  private upsertItemResult(
+    itemId: string,
+    dto: UpdateWorkoutItemResultDto,
+  ) {
     return this.prisma.workoutItemResult.upsert({
       where: { itemId },
       create: {
@@ -362,6 +655,7 @@ export class WorkoutsService {
   private async assertActiveLink(
     trainerId: string,
     clientId: string,
+    gymId: string,
   ): Promise<void> {
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
@@ -372,11 +666,19 @@ export class WorkoutsService {
     }
 
     const link = await this.prisma.clientTrainer.findFirst({
-      where: { clientId, trainerId, isActive: true },
+      where: { clientId, trainerId, gymId, isActive: true },
     });
 
     if (!link) {
-      throw new ForbiddenException('Trainer not linked to client');
+      throw new ForbiddenException('Trainer not linked to client in this gym');
+    }
+
+    const trainerGym = await this.prisma.trainerGym.findFirst({
+      where: { trainerId, gymId, isActive: true },
+    });
+
+    if (!trainerGym) {
+      throw new ForbiddenException('Trainer is not active in this gym');
     }
   }
 
@@ -401,7 +703,11 @@ export class WorkoutsService {
     }
   }
 
-  private async assertItems(items: WorkoutTemplateItemDto[]): Promise<void> {
+  private async assertItems(
+    items: WorkoutTemplateItemDto[],
+    gymId?: string,
+    trainerId?: string,
+  ): Promise<void> {
     const exerciseIds = [...new Set(items.map((item) => item.exerciseId))];
     const exercisesCount = await this.prisma.exercise.count({
       where: { id: { in: exerciseIds } },
@@ -423,8 +729,24 @@ export class WorkoutsService {
       return;
     }
 
+    let allowedGymIds: string[] | undefined;
+    if (!gymId && trainerId) {
+      const trainerGyms = await this.prisma.trainerGym.findMany({
+        where: { trainerId, isActive: true },
+        select: { gymId: true },
+      });
+
+      if (trainerGyms.length > 0) {
+        allowedGymIds = trainerGyms.map((link) => link.gymId);
+      }
+    }
+
     const equipmentCount = await this.prisma.gymEquipment.count({
-      where: { id: { in: equipmentIds } },
+      where: {
+        id: { in: equipmentIds },
+        ...(gymId ? { gymId } : {}),
+        ...(allowedGymIds ? { gymId: { in: allowedGymIds } } : {}),
+      },
     });
 
     if (equipmentCount !== equipmentIds.length) {
@@ -477,8 +799,10 @@ export class WorkoutsService {
     return {
       id: workout.id,
       clientId: workout.clientId,
+      clientName: workout.client.user.name,
       trainerId: workout.trainerId,
       gymId: workout.gymId,
+      gymName: workout.gym.name,
       date: workout.date.toISOString().slice(0, 10),
       status: workout.status,
       comment: workout.comment,

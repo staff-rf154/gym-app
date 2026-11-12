@@ -4,10 +4,11 @@
 
 2. Роли и доступ
 Роль	Интерфейс	Что делает
-ADMIN	Web	Видит всё. Создаёт тренеров, клиентов, залы, тренажёры, упражнения, продукты питания. Рассылает уведомления по залам. Ведёт чаты с клиентами и тренерами
+ADMIN	Web	Видит всё. Создаёт тренеров, клиентов, залы, тренажёры, упражнения, продукты питания. Рассылает уведомления по залам. Ведёт чаты с клиентами и тренерами. Сбрасывает пароли пользователей
+RECEPTION	Web	Ограничен своим залом: видит и ведёт клиентов, тренеров и связи этого зала (assignedBy=RECEPTION), сбрасывает пароли клиентам и тренерам своего зала
 TRAINER	Mobile	Видит своих клиентов (активная связь). Создаёт тренировки (шаблон или с нуля), назначает питание, добавляет замеры веса, смотрит прогресс и расхождения, ведёт чат с клиентами
 CLIENT	Mobile	Видит календарь тренировок, отмечает выполнение с фактическим весом/повторами, смотрит питание, отчёты с графиками, чат с тренером и админом, уведомления
-Регистрация: только администратор создаёт пользователей. Телефон + фиксированный пароль. Админ передаёт пароль лично. Саморегистрации нет. Смены пароля нет.
+Регистрация: только администратор (или ресепшен в своём зале) создаёт пользователей. Телефон + пароль DEFAULT_CLIENT_PASSWORD из env, который передаётся лично при создании. Саморегистрации нет. Пользователь может сменить пароль через `POST /auth/change-password`; админ или ресепшен своего зала может сбросить пароль.
 
 3. Термины и правила
 Клиент может быть привязан к нескольким тренерам и залам одновременно. Связь ClientTrainer хранит clientId + trainerId + gymId + isActive. Активная связь нужна для доступа тренера к клиенту и для broadcast-уведомлений.
@@ -28,7 +29,9 @@ Fallback план→факт. Если клиент не ввёл фактиче
 
 4. Функциональные требования
 4.1. Администратор (web)
-CRUD тренеров: телефон, имя. Пароль = DEFAULT_CLIENT_PASSWORD из env, возвращается в ответе.
+CRUD тренеров: телефон, имя. Пароль = DEFAULT_CLIENT_PASSWORD из env, возвращается только в ответе на создание, повторно не выдаётся.
+
+Сброс пароля пользователя: новый пароль выдаётся один раз в ответе, все refresh-токены пользователя инвалидируются.
 
 CRUD клиентов: телефон, имя, пол, рост, дата рождения, стартовый вес, стартовый % жира, цель, заметки.
 
@@ -84,6 +87,19 @@ CRUD шаблонов тренировок.
 
 Уведомления от администратора, отметка о прочтении.
 
+4.4. Ресепшен (web)
+Ограничен своим залом (Reception.gymId), не видит другие залы и их данные.
+
+Просмотр своего зала.
+
+Клиенты своего зала: список, создание, редактирование, фото.
+
+Тренеры своего зала: список, создание, редактирование, фото.
+
+Назначение и отвязка тренеров клиентам своего зала (assignedBy=RECEPTION).
+
+Сброс пароля клиентам и тренерам своего зала: новый пароль выдаётся один раз, все refresh-токены пользователя инвалидируются.
+
 5. Нефункциональные требования
 Платформа: Android (Flutter). Web-админка: React + Vite + Ant Design.
 
@@ -112,6 +128,8 @@ Client (id, userId, gender, height, birthdate, startWeight, startFatMass, goal, 
 
 Trainer
 
+Reception (id, userId, gymId, createdAt)
+
 ClientTrainer (clientId, trainerId, gymId, isActive, assignedAt)
 
 WeightMeasurement (clientId, measuredBy, measuredAt, weight, fatMass, comment)
@@ -139,8 +157,9 @@ OpenAPI 3.1 — в docs/api.md. Группы эндпоинтов:
 
 Группа	Эндпоинты
 system	GET /health
-auth	POST /auth/login, POST /auth/refresh, GET /auth/me, PATCH /auth/timezone
-admin	CRUD gyms, gym equipment, exercises, food-products, clients, trainers; links; upload; notifications
+auth	POST /auth/login, POST /auth/refresh, GET /auth/me, PATCH /auth/timezone, PATCH /auth/push-token, POST /auth/change-password
+admin	CRUD gyms, gym equipment, exercises, food-products, clients, trainers, receptions; links; upload; notifications; reset-password
+reception	GET /reception/gyms; GET/POST /reception/clients; PUT /reception/clients/{id}; POST /reception/clients/{id}/photo; GET/POST /reception/clients/{id}/trainers; DELETE /reception/clients/{id}/trainers/{linkId}; GET/POST /reception/trainers; PUT /reception/trainers/{id}; POST /reception/trainers/{id}/photo; reset-password
 trainer	GET /trainer/clients, CRUD templates, POST/PUT /trainer/workouts, POST /trainer/nutrition, GET/POST /client/{id}/weight-measurements
 client	GET /client/workouts, GET /client/workouts/{id}, PUT /client/workout-items/{id}/result, GET /client/nutrition
 reports	GET /reports/weight-dynamics, GET /reports/exercise-progress, GET /reports/exercises-summary
@@ -148,7 +167,9 @@ chat	GET /chats, GET/POST /chats/{id}/messages
 notifications	GET /notifications, POST /notifications/{id}/read
 shared	GET /exercises, GET /gyms, GET /gyms/{gymId}/equipment
 8. Экраны
-Web-admin: Login, Dashboard, Trainers, Clients (с drawer «Тренеры» и кнопкой «Вес»), ClientWeight, Gyms, Equipment (вложенно в зал), Exercises, FoodProducts, Notifications, Chats.
+Web-admin: Login, Dashboard, Trainers, Clients (с drawer «Тренеры» и кнопкой «Вес»), ClientWeight, Gyms, Equipment (вложенно в зал), Exercises, FoodProducts, Notifications, Chats, Receptions.
+
+Web-admin RECEPTION: Login, Мой зал, Клиенты, Тренеры, связи клиент↔тренер (только свой зал).
 
 Mobile TRAINER: Login, Мои клиенты, Карточка клиента (тренировки / прогресс / питание / вес / чат), Создание тренировки (шаблон или с нуля → корректировка → отправка), Шаблоны, Прогресс, Питание, Чат, Уведомления, Настройки (TZ).
 
@@ -211,9 +232,11 @@ make up && make migrate && make seed поднимает стек, /health → {"
 
 Админ входит, создаёт зал → тренажёр (с фото) → упражнение → продукт → тренера → клиента (со всеми полями профиля) → связывает клиента с тренером и залом.
 
-Тренер входит (пароль = DEFAULT_CLIENT_PASSWORD), видит клиента, создаёт замер веса, создаёт тренировку (шаблон или с нуля), назначает питание.
+Тренер входит по паролю, выданному при создании (DEFAULT_CLIENT_PASSWORD), видит клиента, создаёт замер веса, создаёт тренировку (шаблон или с нуля), назначает питание.
 
 Клиент входит, видит тренировку в календаре, отмечает выполнение с фактическим весом/повторами, видит питание.
+
+Пользователь может сменить пароль через POST /auth/change-password; админ или ресепшен своего зала может сбросить пароль. После смены/сброса старый refresh-токен не работает, вход со старым паролем возвращает 401.
 
 GET /reports/weight-dynamics возвращает точки замеров.
 

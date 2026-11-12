@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/api/api_error.dart';
 import 'client_workout_models.dart';
 import 'client_workouts_providers.dart';
+import 'workout_execution.dart';
 
 class WorkoutDayScreen extends ConsumerStatefulWidget {
   const WorkoutDayScreen({
@@ -21,16 +22,18 @@ class WorkoutDayScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
-  final _controllers = <String, _ItemControllers>{};
+  final _controllers = <String, WorkoutItemControllers>{};
+  final _steps = <String, int>{};
+  late List<ClientWorkout> _workouts;
   bool _saving = false;
+  String? _actionWorkoutId;
 
   @override
   void initState() {
     super.initState();
-    for (final workout in widget.workouts) {
-      for (final item in workout.items) {
-        _controllers[item.id] = _ItemControllers(item);
-      }
+    _workouts = List.of(widget.workouts);
+    for (final workout in _workouts) {
+      _ensureControllers(workout);
     }
   }
 
@@ -42,40 +45,36 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
     super.dispose();
   }
 
-  Future<void> _save() async {
-    final inputs = <String, WorkoutItemResultInput>{};
-
-    for (final entry in _controllers.entries) {
-      final state = entry.value;
-      final weightText = state.weight.text.trim().replaceAll(',', '.');
-      final repsText = state.reps.text.trim();
-
-      final weight = weightText.isEmpty ? null : double.tryParse(weightText);
-      final reps = repsText.isEmpty ? null : int.tryParse(repsText);
-      if ((weightText.isNotEmpty && weight == null) ||
-          (repsText.isNotEmpty && reps == null)) {
-        _showMessage('Проверьте вес и количество повторений');
-        return;
-      }
-
-      inputs[entry.key] = WorkoutItemResultInput(
-        done: state.done,
-        actualWeight: weight,
-        actualReps: reps,
-        clientComment: state.comment.text.trim(),
+  void _ensureControllers(ClientWorkout workout) {
+    for (final item in workout.items) {
+      _controllers.putIfAbsent(
+        item.id,
+        () => WorkoutItemControllers(item),
       );
     }
+    _steps.putIfAbsent(workout.id, () => 0);
+  }
 
-    setState(() => _saving = true);
-    try {
-      final api = ref.read(clientWorkoutsApiProvider);
-      for (final entry in inputs.entries) {
-        await api.saveItemResult(entry.key, entry.value);
+  void _replaceWorkout(ClientWorkout updated) {
+    setState(() {
+      final index = _workouts.indexWhere((workout) => workout.id == updated.id);
+      if (index != -1) {
+        _workouts[index] = updated;
       }
+      _ensureControllers(updated);
+    });
+  }
+
+  Future<void> _start(ClientWorkout workout) async {
+    setState(() => _actionWorkoutId = workout.id);
+    try {
+      final updated = await ref
+          .read(clientWorkoutsApiProvider)
+          .startWorkout(workout.id);
       if (!mounted) {
         return;
       }
-      _showMessage('Результаты сохранены');
+      _replaceWorkout(updated);
       ref.invalidate(clientMonthWorkoutsProvider);
     } catch (error) {
       if (mounted) {
@@ -83,9 +82,134 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
       }
     } finally {
       if (mounted) {
+        setState(() => _actionWorkoutId = null);
+      }
+    }
+  }
+
+  Future<void> _finish(ClientWorkout workout) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Закончить тренировку?'),
+        content: const Text(
+          'После завершения результаты тренировки нельзя будет изменить.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Закончить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() => _actionWorkoutId = workout.id);
+    try {
+      final saved = await _persistWorkout(workout);
+      if (!saved || !mounted) {
+        return;
+      }
+
+      final updated = await ref
+          .read(clientWorkoutsApiProvider)
+          .finishWorkout(workout.id);
+      if (!mounted) {
+        return;
+      }
+      _replaceWorkout(updated);
+      _showMessage('Тренировка завершена');
+      ref.invalidate(clientMonthWorkoutsProvider);
+    } catch (error) {
+      if (mounted) {
+        _showMessage(apiErrorMessage(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _actionWorkoutId = null);
+      }
+    }
+  }
+
+  Future<bool> _persistItem(ClientWorkout workout, String itemId) async {
+    final state = _controllers[itemId];
+    if (state == null) {
+      return true;
+    }
+
+    final input = state.toInput();
+    if (input == null) {
+      _showMessage('Проверьте вес и количество повторений');
+      return false;
+    }
+
+    try {
+      await ref
+          .read(clientWorkoutsApiProvider)
+          .saveItemResult(itemId, input);
+      return true;
+    } catch (error) {
+      if (mounted) {
+        _showMessage(apiErrorMessage(error));
+      }
+      return false;
+    }
+  }
+
+  Future<bool> _persistWorkout(ClientWorkout workout) async {
+    for (final item in workout.items) {
+      if (!await _persistItem(workout, item.id)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _saveWorkout(ClientWorkout workout) async {
+    setState(() => _saving = true);
+    try {
+      final saved = await _persistWorkout(workout);
+      if (saved && mounted) {
+        _showMessage('Результаты сохранены');
+        ref.invalidate(clientMonthWorkoutsProvider);
+      }
+    } finally {
+      if (mounted) {
         setState(() => _saving = false);
       }
     }
+  }
+
+  Future<void> _moveStep(ClientWorkout workout, int delta) async {
+    final step = _steps[workout.id] ?? 0;
+    final target = step + delta;
+    if (target < 0 || target >= workout.items.length) {
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final saved = await _persistItem(workout, workout.items[step].id);
+      if (saved && mounted) {
+        setState(() => _steps[workout.id] = target);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  void _setDone(String itemId, bool done) {
+    setState(() => _controllers[itemId]!.done = done);
   }
 
   void _showMessage(String message) {
@@ -98,55 +222,62 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dateLabel = DateFormat('dd.MM.yyyy').format(widget.date);
+    final busy = _saving || _actionWorkoutId != null;
 
     return Scaffold(
       appBar: AppBar(title: Text('Тренировка · $dateLabel')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          for (final workout in widget.workouts) ...[
-            _WorkoutHeader(workout: workout),
+          for (final workout in _workouts) ...[
+            _WorkoutHeader(
+              workout: workout,
+              busy: busy,
+              onStart: workout.canStart ? () => _start(workout) : null,
+              onFinish: workout.isInProgress ? () => _finish(workout) : null,
+            ),
             const SizedBox(height: 8),
             if (workout.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(child: Text('В тренировке нет упражнений')),
               )
+            else if (workout.isInProgress)
+              WorkoutStepView(
+                workout: workout,
+                stepIndex: _steps[workout.id] ?? 0,
+                controllers: _controllers,
+                saving: busy,
+                onDoneChanged: _setDone,
+                onBack: () => _moveStep(workout, -1),
+                onNext: () => _moveStep(workout, 1),
+                onSave: () => _saveWorkout(workout),
+                onFinish: () => _finish(workout),
+              )
             else
               for (final item in workout.items) ...[
-                _ItemCard(
+                WorkoutItemCard(
                   item: item,
                   controllers: _controllers[item.id]!,
-                  onDoneChanged: (value) =>
-                      setState(() => _controllers[item.id]!.done = value),
+                  enabled: false,
                 ),
                 const SizedBox(height: 10),
               ],
             const SizedBox(height: 8),
           ],
-          if (widget.workouts.isEmpty)
+          if (_workouts.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
               child: Center(child: Text('На этот день тренировок нет')),
             ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save_outlined),
-            label: Text(_saving ? 'Сохранение…' : 'Сохранить результаты'),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Фактический вес можно не заполнять — тогда при расчёте прогресса '
-            'будет использован плановый вес.',
-            style: theme.textTheme.bodySmall,
-          ),
+          if (_workouts.any((workout) => workout.isInProgress)) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Фактический вес можно не заполнять — тогда при расчёте прогресса '
+              'будет использован плановый вес.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );
@@ -154,9 +285,17 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
 }
 
 class _WorkoutHeader extends StatelessWidget {
-  const _WorkoutHeader({required this.workout});
+  const _WorkoutHeader({
+    required this.workout,
+    required this.busy,
+    this.onStart,
+    this.onFinish,
+  });
 
   final ClientWorkout workout;
+  final bool busy;
+  final VoidCallback? onStart;
+  final VoidCallback? onFinish;
 
   @override
   Widget build(BuildContext context) {
@@ -187,126 +326,37 @@ class _WorkoutHeader extends StatelessWidget {
               const SizedBox(height: 8),
               Text(workout.comment!, style: theme.textTheme.bodyMedium),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ItemCard extends StatelessWidget {
-  const _ItemCard({
-    required this.item,
-    required this.controllers,
-    required this.onDoneChanged,
-  });
-
-  final ClientWorkoutItem item;
-  final _ItemControllers controllers;
-  final ValueChanged<bool> onDoneChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.exerciseName,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(item.planLabel, style: theme.textTheme.bodySmall),
-                    ],
-                  ),
-                ),
-                Checkbox(
-                  value: controllers.done,
-                  onChanged: (value) => onDoneChanged(value ?? false),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controllers.weight,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+            if (onStart != null || onFinish != null) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (onStart != null)
+                    FilledButton.icon(
+                      onPressed: busy ? null : onStart,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Начать тренировку'),
                     ),
-                    decoration: const InputDecoration(
-                      labelText: 'Факт. вес, кг',
-                      isDense: true,
-                      border: OutlineInputBorder(),
+                  if (onFinish != null)
+                    FilledButton.tonalIcon(
+                      onPressed: busy ? null : onFinish,
+                      icon: const Icon(Icons.flag_outlined),
+                      label: const Text('Закончить тренировку'),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: controllers.reps,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Повторений',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: controllers.comment,
-              minLines: 1,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Комментарий',
-                isDense: true,
-                border: OutlineInputBorder(),
+                ],
               ),
-            ),
+            ],
+            if (workout.isLocked) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Результаты завершённой тренировки доступны только для чтения.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
           ],
         ),
       ),
     );
-  }
-}
-
-class _ItemControllers {
-  _ItemControllers(ClientWorkoutItem item)
-    : done = item.result?.done ?? false,
-      weight = TextEditingController(
-        text: item.result?.actualWeight == null
-            ? ''
-            : formatWorkoutNumber(item.result!.actualWeight!),
-      ),
-      reps = TextEditingController(
-        text: item.result?.actualReps?.toString() ?? '',
-      ),
-      comment = TextEditingController(text: item.result?.clientComment ?? '');
-
-  bool done;
-  final TextEditingController weight;
-  final TextEditingController reps;
-  final TextEditingController comment;
-
-  void dispose() {
-    weight.dispose();
-    reps.dispose();
-    comment.dispose();
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_error.dart';
+import '../../core/utils/format.dart';
 import '../chats/chat_models.dart';
 import '../chats/chat_providers.dart';
 import '../chats/chat_screen.dart';
@@ -8,6 +10,7 @@ import '../nutrition/nutrition_tab.dart';
 import '../progress/progress_tab.dart';
 import '../weights/weight_tab.dart';
 import '../workouts/workout_builder_screen.dart';
+import '../workouts/workouts_providers.dart';
 import 'trainer_client.dart';
 
 class ClientCardScreen extends StatelessWidget {
@@ -54,46 +57,129 @@ class ClientCardScreen extends StatelessWidget {
   }
 }
 
-class _WorkoutsTab extends StatelessWidget {
+class _WorkoutsTab extends ConsumerStatefulWidget {
   const _WorkoutsTab({required this.client});
 
   final TrainerClient client;
 
-  Future<void> _createWorkout(BuildContext context) async {
+  @override
+  ConsumerState<_WorkoutsTab> createState() => _WorkoutsTabState();
+}
+
+class _WorkoutsTabState extends ConsumerState<_WorkoutsTab> {
+  String _gymId = '';
+
+  Future<void> _createWorkout() async {
     final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => WorkoutBuilderScreen(client: client)),
+      MaterialPageRoute(
+        builder: (_) => WorkoutBuilderScreen(client: widget.client),
+      ),
     );
-    if (created == true && context.mounted) {
+    if (created == true && mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Тренировка назначена')));
+      ref.invalidate(trainerClientWorkoutsProvider(widget.client.id));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.fitness_center, size: 48),
-            const SizedBox(height: 12),
-            Text('Тренировки', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            const Text(
-              'Назначьте новую тренировку — она появится у клиента.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () => _createWorkout(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Создать тренировку'),
-            ),
-          ],
+    final workouts = ref.watch(
+      trainerClientWorkoutsProvider(widget.client.id),
+    );
+    final gyms = ref.watch(gymsProvider).asData?.value ?? const [];
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _gymId,
+                  decoration: const InputDecoration(
+                    labelText: 'Зал',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('Все залы')),
+                    for (final gym in gyms)
+                      DropdownMenuItem(value: gym.id, child: Text(gym.name)),
+                  ],
+                  onChanged: (value) => setState(() => _gymId = value ?? ''),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _createWorkout,
+                icon: const Icon(Icons.add),
+                label: const Text('Создать'),
+              ),
+            ],
+          ),
         ),
-      ),
+        Expanded(
+          child: workouts.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(apiErrorMessage(error), textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => ref.invalidate(
+                        trainerClientWorkoutsProvider(widget.client.id),
+                      ),
+                      child: const Text('Повторить'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            data: (items) {
+              final filtered = _gymId.isEmpty
+                  ? items
+                  : items.where((item) => item.gymId == _gymId).toList();
+              return RefreshIndicator(
+                onRefresh: () async => ref.invalidate(
+                  trainerClientWorkoutsProvider(widget.client.id),
+                ),
+                child: filtered.isEmpty
+                    ? ListView(
+                        children: const [
+                          ListTile(
+                            title: Text('Тренировок пока нет'),
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final workout = filtered[index];
+                          return ListTile(
+                            leading: const Icon(Icons.fitness_center),
+                            title: Text(formatDate(workout.date)),
+                            subtitle: Text(
+                              [
+                                if (workout.gymName != null) workout.gymName!,
+                                workout.statusLabel,
+                                '${workout.completedItems}/${workout.items.length}',
+                              ].join(' · '),
+                            ),
+                          );
+                        },
+                      ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -110,6 +196,8 @@ class _ClientSummary extends StatelessWidget {
       if (client.age != null) '${client.age} лет',
       if (client.height != null) '${formatNumber(client.height!)} см',
       if (client.goal != null && client.goal!.isNotEmpty) client.goal!,
+      if (client.trainers.isNotEmpty)
+        'Тренеры: ${client.trainers.map((link) => '${link.trainerName} (${assignedByLabel(link.assignedBy)})').join(', ')}',
     ];
 
     return Card(

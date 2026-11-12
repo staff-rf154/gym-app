@@ -27,6 +27,20 @@ class ClientWorkoutsApi {
     return ClientWorkout.fromJson(response.data!);
   }
 
+  Future<ClientWorkout> startWorkout(String id) async {
+    final response = await _api.dio.post<Map<String, dynamic>>(
+      '/client/workouts/$id/start',
+    );
+    return ClientWorkout.fromJson(response.data!);
+  }
+
+  Future<ClientWorkout> finishWorkout(String id) async {
+    final response = await _api.dio.post<Map<String, dynamic>>(
+      '/client/workouts/$id/finish',
+    );
+    return ClientWorkout.fromJson(response.data!);
+  }
+
   Future<void> saveItemResult(
     String itemId,
     WorkoutItemResultInput input,

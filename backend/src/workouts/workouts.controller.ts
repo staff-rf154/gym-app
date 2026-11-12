@@ -18,6 +18,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { ClientWorkoutsQueryDto } from './dto/client-workouts-query.dto';
 import { CreateWorkoutTemplateDto } from './dto/create-workout-template.dto';
 import { CreateWorkoutDto } from './dto/create-workout.dto';
+import { TrainerWorkoutsQueryDto } from './dto/trainer-workouts-query.dto';
 import { UpdateWorkoutItemResultDto } from './dto/update-workout-item-result.dto';
 import { UpdateWorkoutTemplateDto } from './dto/update-workout-template.dto';
 import {
@@ -87,6 +88,24 @@ export class TrainerTemplatesController {
 export class TrainerWorkoutsController {
   constructor(private readonly workoutsService: WorkoutsService) {}
 
+  @Get()
+  @ApiOperation({ summary: 'Тренировки клиентов тренера' })
+  findAll(
+    @CurrentUser('userId') userId: string,
+    @Query() query: TrainerWorkoutsQueryDto,
+  ): Promise<WorkoutResponse[]> {
+    return this.workoutsService.trainerWorkouts(userId, query);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Тренировка клиента тренера' })
+  findOne(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<WorkoutResponse> {
+    return this.workoutsService.trainerWorkout(userId, id);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Назначить тренировку клиенту' })
   create(
@@ -104,6 +123,26 @@ export class TrainerWorkoutsController {
     @Body() dto: CreateWorkoutDto,
   ): Promise<WorkoutResponse> {
     return this.workoutsService.updateWorkout(userId, id, dto);
+  }
+
+  @Post(':id/start')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Начать тренировку клиента' })
+  start(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<WorkoutResponse> {
+    return this.workoutsService.trainerStartWorkout(userId, id);
+  }
+
+  @Post(':id/finish')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Завершить тренировку клиента' })
+  finish(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<WorkoutResponse> {
+    return this.workoutsService.trainerFinishWorkout(userId, id);
   }
 }
 
@@ -131,6 +170,26 @@ export class ClientWorkoutsController {
   ): Promise<WorkoutResponse> {
     return this.workoutsService.clientWorkout(userId, id);
   }
+
+  @Post(':id/start')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Начать тренировку' })
+  start(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<WorkoutResponse> {
+    return this.workoutsService.startWorkout(userId, id);
+  }
+
+  @Post(':id/finish')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Завершить тренировку' })
+  finish(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<WorkoutResponse> {
+    return this.workoutsService.finishWorkout(userId, id);
+  }
 }
 
 @ApiTags('client')
@@ -148,5 +207,23 @@ export class ClientWorkoutItemsController {
     @Body() dto: UpdateWorkoutItemResultDto,
   ): Promise<WorkoutItemResult> {
     return this.workoutsService.updateItemResult(userId, id, dto);
+  }
+}
+
+@ApiTags('trainer')
+@ApiBearerAuth()
+@Roles(Role.TRAINER)
+@Controller('trainer/workout-items')
+export class TrainerWorkoutItemsController {
+  constructor(private readonly workoutsService: WorkoutsService) {}
+
+  @Put(':id/result')
+  @ApiOperation({ summary: 'Отметить выполнение упражнения клиента' })
+  updateResult(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateWorkoutItemResultDto,
+  ): Promise<WorkoutItemResult> {
+    return this.workoutsService.updateTrainerItemResult(userId, id, dto);
   }
 }

@@ -1,9 +1,15 @@
 import { Module } from '@nestjs/common';
-import { WeightMeasurementsController } from './weight-measurements.controller';
+import {
+  AdminWeightMeasurementsController,
+  WeightMeasurementsController,
+} from './weight-measurements.controller';
 import { WeightMeasurementsService } from './weight-measurements.service';
 
 @Module({
-  controllers: [WeightMeasurementsController],
+  controllers: [
+    WeightMeasurementsController,
+    AdminWeightMeasurementsController,
+  ],
   providers: [WeightMeasurementsService],
 })
 export class WeightMeasurementsModule {}

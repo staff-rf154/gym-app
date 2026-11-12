@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -28,5 +29,6 @@ export class CreateWeightMeasurementDto {
   @ApiPropertyOptional({ example: 'Утренний замер' })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   comment?: string;
 }

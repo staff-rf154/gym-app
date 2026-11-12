@@ -82,6 +82,7 @@ export class ChatsService {
     dto: SendMessageDto,
   ): Promise<Message> {
     await this.assertParticipant(userId, chatId);
+    await this.assertActiveLink(chatId);
 
     const message = await this.prisma.message.create({
       data: { chatId, senderId: userId, text: dto.text },
@@ -90,6 +91,15 @@ export class ChatsService {
     this.chatEvents.emitMessage(message);
 
     return message;
+  }
+
+  async markRead(userId: string, chatId: string): Promise<void> {
+    await this.assertParticipant(userId, chatId);
+
+    await this.prisma.message.updateMany({
+      where: { chatId, senderId: { not: userId }, readAt: null },
+      data: { readAt: new Date() },
+    });
   }
 
   async isParticipant(userId: string, chatId: string): Promise<boolean> {
@@ -118,6 +128,36 @@ export class ChatsService {
   ): Promise<void> {
     if (!(await this.isParticipant(userId, chatId))) {
       throw new NotFoundException('Chat not found');
+    }
+  }
+
+  private async assertActiveLink(chatId: string): Promise<void> {
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      select: { clientId: true, trainerId: true },
+    });
+
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    if (!chat.clientId || !chat.trainerId) {
+      return;
+    }
+
+    const activeLink = await this.prisma.clientTrainer.findFirst({
+      where: {
+        clientId: chat.clientId,
+        trainerId: chat.trainerId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!activeLink) {
+      throw new ForbiddenException(
+        'Chat is read-only because the client-trainer link is inactive',
+      );
     }
   }
 

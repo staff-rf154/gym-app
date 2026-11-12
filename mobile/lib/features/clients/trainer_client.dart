@@ -1,3 +1,7 @@
+import '../../core/utils/format.dart';
+
+export '../../core/utils/format.dart' show formatNumber;
+
 class TrainerClient {
   const TrainerClient({
     required this.id,
@@ -13,6 +17,7 @@ class TrainerClient {
     this.currentFatMass,
     this.goal,
     this.notes,
+    this.trainers = const [],
   });
 
   factory TrainerClient.fromJson(Map<String, dynamic> json) {
@@ -28,8 +33,12 @@ class TrainerClient {
       startFatMass: (json['startFatMass'] as num?)?.toDouble(),
       currentWeight: (json['currentWeight'] as num?)?.toDouble(),
       currentFatMass: (json['currentFatMass'] as num?)?.toDouble(),
-      goal: json['goal'] as String?,
+      goal: _parseGoal(json),
       notes: json['notes'] as String?,
+      trainers: (json['active_trainers'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(TrainerLinkInfo.fromJson)
+          .toList(),
     );
   }
 
@@ -46,6 +55,7 @@ class TrainerClient {
   final double? currentFatMass;
   final String? goal;
   final String? notes;
+  final List<TrainerLinkInfo> trainers;
 
   String get weightLabel => currentWeight == null
       ? 'Вес: —'
@@ -68,9 +78,37 @@ class TrainerClient {
   }
 }
 
-String formatNumber(double value) {
-  if (value == value.roundToDouble()) {
-    return value.toStringAsFixed(0);
+String? _parseGoal(Map<String, dynamic> json) {
+  final goal = json['goal'];
+  if (goal is String && goal.isNotEmpty) {
+    return goal;
   }
-  return value.toStringAsFixed(1);
+  if (goal is Map<String, dynamic>) {
+    final name = goal['name'];
+    if (name is String && name.isNotEmpty) {
+      return name;
+    }
+  }
+  final text = json['goalText'];
+  return text is String && text.isNotEmpty ? text : null;
+}
+
+class TrainerLinkInfo {
+  const TrainerLinkInfo({
+    required this.trainerId,
+    required this.trainerName,
+    required this.assignedBy,
+  });
+
+  factory TrainerLinkInfo.fromJson(Map<String, dynamic> json) {
+    return TrainerLinkInfo(
+      trainerId: json['trainerId'] as String? ?? '',
+      trainerName: json['trainerName'] as String? ?? 'Тренер',
+      assignedBy: json['assignedBy'] as String? ?? '',
+    );
+  }
+
+  final String trainerId;
+  final String trainerName;
+  final String assignedBy;
 }

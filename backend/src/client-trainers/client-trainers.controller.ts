@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientTrainer, Role } from '@prisma/client';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ClientTrainersService } from './client-trainers.service';
 import { LinkTrainerDto } from './dto/link-trainer.dto';
@@ -24,10 +25,11 @@ export class ClientTrainersController {
   @Post(':id/trainers')
   @ApiOperation({ summary: 'Привязать тренера к клиенту' })
   link(
+    @CurrentUser('userId') userId: string,
     @Param('id', ParseUUIDPipe) clientId: string,
     @Body() dto: LinkTrainerDto,
   ): Promise<ClientTrainer> {
-    return this.clientTrainersService.link(clientId, dto);
+    return this.clientTrainersService.link(clientId, dto, userId);
   }
 
   @Delete(':id/trainers/:linkId')

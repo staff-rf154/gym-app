@@ -5,6 +5,7 @@ import '../../core/api/api_error.dart';
 import '../../core/providers.dart';
 import '../../core/widgets/server_url_dialog.dart';
 import '../auth/auth_controller.dart';
+import '../gyms/my_gyms_screen.dart';
 
 const _timezones = <String>[
   'UTC',
@@ -20,6 +21,9 @@ const _timezones = <String>[
   'Asia/Vladivostok',
   'Asia/Magadan',
   'Asia/Kamchatka',
+  'Asia/Barnaul',
+  'Asia/Tomsk',
+  'Asia/Kemerovo',
   'Asia/Almaty',
   'Asia/Bishkek',
   'Asia/Tashkent',
@@ -199,6 +203,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ? null
               : () => _editTimezone(user.timezone),
         ),
+        if (user?.role == 'TRAINER' || user?.role == 'CLIENT')
+          ListTile(
+            leading: const Icon(Icons.fitness_center),
+            title: const Text('Мои залы'),
+            subtitle: const Text('Залы и назначенные тренеры'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const MyGymsScreen(),
+              ),
+            ),
+          ),
         ListTile(
           leading: const Icon(Icons.dns),
           title: const Text('Адрес сервера'),

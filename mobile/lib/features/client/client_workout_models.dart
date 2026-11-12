@@ -1,3 +1,5 @@
+import '../../core/utils/format.dart';
+
 class ClientWorkoutItemResult {
   const ClientWorkoutItemResult({
     required this.done,
@@ -29,6 +31,8 @@ class ClientWorkoutItem {
     required this.plannedSets,
     required this.plannedReps,
     required this.order,
+    this.equipmentId,
+    this.equipmentName,
     this.plannedWeight,
     this.result,
   });
@@ -36,11 +40,14 @@ class ClientWorkoutItem {
   factory ClientWorkoutItem.fromJson(Map<String, dynamic> json) {
     final exercise = json['exercise'] as Map<String, dynamic>? ?? const {};
     final result = json['result'] as Map<String, dynamic>?;
+    final equipment = json['gymEquipment'] as Map<String, dynamic>?;
 
     return ClientWorkoutItem(
       id: json['id'] as String,
       exerciseId: exercise['id'] as String? ?? '',
       exerciseName: exercise['name'] as String? ?? 'Упражнение',
+      equipmentId: equipment?['id'] as String?,
+      equipmentName: equipment?['name'] as String?,
       plannedWeight: (json['plannedWeight'] as num?)?.toDouble(),
       plannedSets: (json['plannedSets'] as num?)?.toInt() ?? 0,
       plannedReps: (json['plannedReps'] as num?)?.toInt() ?? 0,
@@ -52,6 +59,8 @@ class ClientWorkoutItem {
   final String id;
   final String exerciseId;
   final String exerciseName;
+  final String? equipmentId;
+  final String? equipmentName;
   final double? plannedWeight;
   final int plannedSets;
   final int plannedReps;
@@ -59,10 +68,9 @@ class ClientWorkoutItem {
   final ClientWorkoutItemResult? result;
 
   String get planLabel {
-    final weight = plannedWeight == null
-        ? '—'
-        : formatWorkoutNumber(plannedWeight!);
-    return '$weight кг × $plannedReps повт. · $plannedSets подх.';
+    final weight = plannedWeight == null ? '—' : formatNumber(plannedWeight!);
+    final equipment = equipmentName == null ? '' : ' · $equipmentName';
+    return '$weight кг × $plannedReps повт. · $plannedSets подх.$equipment';
   }
 }
 
@@ -75,6 +83,8 @@ class ClientWorkout {
     required this.status,
     required this.items,
     this.trainerId,
+    this.clientName,
+    this.gymName,
     this.comment,
     this.templateId,
   });
@@ -93,6 +103,8 @@ class ClientWorkout {
       id: json['id'] as String,
       clientId: json['clientId'] as String,
       trainerId: json['trainerId'] as String?,
+      clientName: json['clientName'] as String?,
+      gymName: json['gymName'] as String?,
       gymId: json['gymId'] as String,
       date: json['date'] as String,
       status: json['status'] as String? ?? 'PLANNED',
@@ -105,6 +117,8 @@ class ClientWorkout {
   final String id;
   final String clientId;
   final String? trainerId;
+  final String? clientName;
+  final String? gymName;
   final String gymId;
   final String date;
   final String status;
@@ -117,13 +131,20 @@ class ClientWorkout {
   String get statusLabel {
     return switch (status) {
       'DONE' => 'Выполнена',
-      'CANCELLED' => 'Отменена',
+      'IN_PROGRESS' => 'В процессе',
+      'SKIPPED' => 'Пропущена',
       _ => 'Запланирована',
     };
   }
 
   int get completedItems =>
       items.where((item) => item.result?.done == true).length;
+
+  bool get canStart => status == 'PLANNED';
+
+  bool get isInProgress => status == 'IN_PROGRESS';
+
+  bool get isLocked => status == 'DONE' || status == 'SKIPPED';
 }
 
 class WorkoutItemResultInput {
@@ -150,8 +171,3 @@ class WorkoutItemResultInput {
   }
 }
 
-String formatWorkoutNumber(double value) {
-  return value == value.roundToDouble()
-      ? value.toStringAsFixed(0)
-      : value.toStringAsFixed(1);
-}

@@ -4,14 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
+import '../client/client_workout_models.dart';
 import '../clients/trainer_client.dart';
 import 'workout_models.dart';
 import 'workouts_providers.dart';
 
 class WorkoutBuilderScreen extends ConsumerStatefulWidget {
-  const WorkoutBuilderScreen({super.key, required this.client});
+  const WorkoutBuilderScreen({super.key, required this.client, this.workout});
 
   final TrainerClient client;
+  final ClientWorkout? workout;
 
   @override
   ConsumerState<WorkoutBuilderScreen> createState() =>
@@ -19,14 +21,39 @@ class WorkoutBuilderScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
-  final _commentController = TextEditingController();
+  late final TextEditingController _commentController;
   final _selected = <String>{};
   final _fields = <String, _ItemFields>{};
 
   String? _gymId;
   String? _templateId;
-  DateTime _date = DateTime.now();
+  late DateTime _date;
   bool _submitting = false;
+
+  bool get _isEditing => widget.workout != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final workout = widget.workout;
+    _commentController = TextEditingController(text: workout?.comment ?? '');
+    _gymId = workout?.gymId;
+    _templateId = workout?.templateId;
+    _date = workout?.dateTime ?? DateTime.now();
+
+    if (workout != null) {
+      for (final item in workout.items) {
+        _selected.add(item.exerciseId);
+        _fields[item.exerciseId] = _ItemFields(
+          weight: item.plannedWeight,
+          sets: item.plannedSets,
+          reps: item.plannedReps,
+          equipmentId: item.equipmentId,
+          result: item.result,
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -85,6 +112,7 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
           weight: item.plannedWeight,
           sets: item.plannedSets,
           reps: item.plannedReps,
+          equipmentId: item.equipmentId,
         );
       }
     });
@@ -141,6 +169,7 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
       items.add(
         WorkoutItemInput(
           exerciseId: exercise.id,
+          equipmentId: fields.equipmentId,
           plannedWeight: weight,
           plannedSets: sets,
           plannedReps: reps,
@@ -152,16 +181,32 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
     setState(() => _submitting = true);
     try {
       final comment = _commentController.text.trim();
-      await ref
-          .read(workoutsApiProvider)
-          .createWorkout(
-            clientId: widget.client.id,
-            gymId: _gymId!,
-            date: DateFormat('yyyy-MM-dd').format(_date),
-            templateId: _templateId,
-            comment: comment.isEmpty ? null : comment,
-            items: items,
-          );
+      final api = ref.read(workoutsApiProvider);
+      final workout = widget.workout;
+      if (workout == null) {
+        await api.createWorkout(
+          clientId: widget.client.id,
+          gymId: _gymId!,
+          date: DateFormat('yyyy-MM-dd').format(_date),
+          templateId: _templateId,
+          comment: comment.isEmpty ? null : comment,
+          items: items,
+        );
+      } else {
+        await api.updateWorkout(
+          id: workout.id,
+          clientId: widget.client.id,
+          gymId: _gymId!,
+          date: DateFormat('yyyy-MM-dd').format(_date),
+          templateId: _templateId,
+          comment: comment.isEmpty ? null : comment,
+          items: items,
+        );
+      }
+      ref.invalidate(trainerClientWorkoutsProvider(widget.client.id));
+      if (workout != null) {
+        ref.invalidate(trainerWorkoutProvider(workout.id));
+      }
       if (!mounted) {
         return;
       }
@@ -188,7 +233,7 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
 
     if (gyms.isLoading || exercises.isLoading || templates.isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Новая тренировка')),
+        appBar: AppBar(title: Text(_title)),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -196,7 +241,7 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
     final error = gyms.error ?? exercises.error ?? templates.error;
     if (error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Новая тренировка')),
+        appBar: AppBar(title: Text(_title)),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -223,9 +268,15 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
     final gymList = gyms.requireValue;
     final exerciseList = exercises.requireValue;
     final templateList = templates.requireValue;
+    final equipmentList = _gymId == null
+        ? const <GymEquipment>[]
+        : switch (ref.watch(gymEquipmentProvider(_gymId!))) {
+            AsyncData(:final value) => value,
+            _ => const <GymEquipment>[],
+          };
 
     return Scaffold(
-      appBar: AppBar(title: Text('Тренировка · ${widget.client.name}')),
+      appBar: AppBar(title: Text('$_title · ${widget.client.name}')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
@@ -249,7 +300,9 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
                   ),
                 )
                 .toList(),
-            onChanged: (value) => setState(() => _gymId = value),
+            onChanged: _submitting
+                ? null
+                : (value) => setState(() => _gymId = value),
           ),
           const SizedBox(height: 20),
           _SectionTitle('Шаблон (необязательно)'),
@@ -265,11 +318,13 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
                 ),
               ),
             ],
-            onChanged: (value) => _selectTemplate(
-              value == null || value.isEmpty ? null : value,
-              templateList,
-              exerciseList,
-            ),
+            onChanged: _submitting
+                ? null
+                : (value) => _selectTemplate(
+                    value == null || value.isEmpty ? null : value,
+                    templateList,
+                    exerciseList,
+                  ),
           ),
           const SizedBox(height: 20),
           _SectionTitle('Дата'),
@@ -280,6 +335,16 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
           ),
           const SizedBox(height: 20),
           _SectionTitle('Упражнения'),
+          if (equipmentList.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                _gymId == null
+                    ? 'Выберите зал, чтобы увидеть доступные тренажёры.'
+                    : 'В выбранном зале нет тренажёров.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           Card(
             margin: EdgeInsets.zero,
             child: Column(
@@ -289,9 +354,15 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
                     exercise: exercise,
                     selected: _selected.contains(exercise.id),
                     fields: _fields[exercise.id],
+                    equipment: equipmentList,
                     enabled: !_submitting,
                     onChanged: (selected) =>
                         _toggleExercise(exercise.id, selected),
+                    onEquipmentChanged: (equipmentId) {
+                      setState(
+                        () => _fields[exercise.id]?.equipmentId = equipmentId,
+                      );
+                    },
                   ),
               ],
             ),
@@ -317,13 +388,22 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.check),
-            label: Text(_submitting ? 'Отправка…' : 'Назначить тренировку'),
+                : Icon(_isEditing ? Icons.save : Icons.check),
+            label: Text(
+              _submitting
+                  ? 'Сохранение…'
+                  : _isEditing
+                  ? 'Сохранить изменения'
+                  : 'Назначить тренировку',
+            ),
           ),
         ],
       ),
     );
   }
+
+  String get _title =>
+      _isEditing ? 'Редактирование тренировки' : 'Новая тренировка';
 }
 
 class _ExerciseTile extends StatelessWidget {
@@ -331,18 +411,29 @@ class _ExerciseTile extends StatelessWidget {
     required this.exercise,
     required this.selected,
     required this.fields,
+    required this.equipment,
     required this.enabled,
     required this.onChanged,
+    required this.onEquipmentChanged,
   });
 
   final Exercise exercise;
   final bool selected;
   final _ItemFields? fields;
+  final List<GymEquipment> equipment;
   final bool enabled;
   final ValueChanged<bool> onChanged;
+  final ValueChanged<String?> onEquipmentChanged;
 
   @override
   Widget build(BuildContext context) {
+    final field = fields;
+    final equipmentId = equipment.any(
+      (item) => item.id == field?.equipmentId,
+    )
+        ? field!.equipmentId
+        : null;
+
     return Column(
       children: [
         CheckboxListTile(
@@ -352,60 +443,137 @@ class _ExerciseTile extends StatelessWidget {
           subtitle: exercise.subtitle.isEmpty ? null : Text(exercise.subtitle),
           controlAffinity: ListTileControlAffinity.leading,
         ),
-        if (selected && fields != null)
+        if (selected && field != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: fields!.weightController,
-                    enabled: enabled,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                    ],
+                if (exercise.requiresEquipment && equipment.isNotEmpty) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: equipmentId,
                     decoration: const InputDecoration(
-                      labelText: 'Вес, кг',
+                      labelText: 'Тренажёр',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
+                    items: equipment
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item.id,
+                            child: Text(
+                              item.weightRangeLabel.isEmpty
+                                  ? item.name
+                                  : '${item.name} · ${item.weightRangeLabel}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: enabled ? onEquipmentChanged : null,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: fields!.setsController,
-                    enabled: enabled,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      labelText: 'Подходы',
-                      border: OutlineInputBorder(),
-                      isDense: true,
+                  const SizedBox(height: 8),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: field.weightController,
+                        enabled: enabled,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Вес, кг',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: fields!.repsController,
-                    enabled: enabled,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      labelText: 'Повторы',
-                      border: OutlineInputBorder(),
-                      isDense: true,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: field.setsController,
+                        enabled: enabled,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Подходы',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: field.repsController,
+                        enabled: enabled,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Повторы',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                if (field.result != null) ...[
+                  const SizedBox(height: 8),
+                  _ResultLabel(result: field.result!),
+                ],
               ],
             ),
           ),
         const Divider(height: 1),
+      ],
+    );
+  }
+}
+
+class _ResultLabel extends StatelessWidget {
+  const _ResultLabel({required this.result});
+
+  final ClientWorkoutItemResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final parts = <String>[
+      result.done ? 'Выполнено' : 'Не выполнено',
+      if (result.actualWeight != null)
+        '${formatNumber(result.actualWeight!)} кг',
+      if (result.actualReps != null) '${result.actualReps} повт.',
+      if (result.clientComment != null && result.clientComment!.isNotEmpty)
+        result.clientComment!,
+    ];
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          result.done ? Icons.check_circle : Icons.radio_button_unchecked,
+          size: 18,
+          color: result.done
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            'Клиент: ${parts.join(' · ')}',
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
       ],
     );
   }
@@ -426,14 +594,23 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _ItemFields {
-  _ItemFields({num? weight, int sets = 3, int reps = 10})
-    : weightController = TextEditingController(text: weight?.toString() ?? ''),
-      setsController = TextEditingController(text: '$sets'),
-      repsController = TextEditingController(text: '$reps');
+  _ItemFields({
+    num? weight,
+    int sets = 3,
+    int reps = 10,
+    this.equipmentId,
+    this.result,
+  }) : weightController = TextEditingController(
+         text: weight == null ? '' : formatNumber(weight.toDouble()),
+       ),
+       setsController = TextEditingController(text: '$sets'),
+       repsController = TextEditingController(text: '$reps');
 
   final TextEditingController weightController;
   final TextEditingController setsController;
   final TextEditingController repsController;
+  String? equipmentId;
+  final ClientWorkoutItemResult? result;
 
   void dispose() {
     weightController.dispose();

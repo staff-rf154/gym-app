@@ -7,6 +7,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -46,6 +47,7 @@ export class CreateNutritionDto {
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   comment?: string;
 
   @ApiPropertyOptional({ example: '2026-11-01', format: 'date' })

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import axios from 'axios';
 import {
+  Alert,
   Button,
+  Empty,
   Form,
   Image,
   Input,
@@ -20,6 +22,8 @@ import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import api from '../../api/client';
+import { useCrudModal } from '../../hooks/useCrudModal';
+import { useTableSearch } from '../../hooks/useTableSearch';
 
 type EquipmentType = 'CARDIO' | 'MACHINE' | 'FREE_WEIGHT' | 'OTHER';
 
@@ -43,6 +47,11 @@ interface EquipmentFormValues {
   description?: string;
 }
 
+interface Gym {
+  id: string;
+  name: string;
+}
+
 const TYPE_OPTIONS: { value: EquipmentType; label: string }[] = [
   { value: 'CARDIO', label: 'Кардио' },
   { value: 'MACHINE', label: 'Тренажёр' },
@@ -58,19 +67,38 @@ const TYPE_LABELS: Record<EquipmentType, string> = {
 };
 
 export default function EquipmentPage() {
-  const { id: gymId } = useParams<{ id: string }>();
+  const { id: routeGymId } = useParams<{ id: string }>();
+  const [selectedGymId, setSelectedGymId] = useState('');
   const [form] = Form.useForm<EquipmentFormValues>();
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingEquipment, setEditingEquipment] = useState<Equipment | null>(
-    null,
-  );
+  const {
+    open: isModalOpen,
+    editing: editingEquipment,
+    openCreate,
+    openEdit,
+    close,
+  } = useCrudModal<Equipment>();
 
   const photoUrl = Form.useWatch('photoUrl', form);
 
+  const { data: gyms = [], isLoading: gymsLoading } = useQuery({
+    queryKey: ['gyms'],
+    enabled: !routeGymId,
+    queryFn: async () => {
+      const { data } = await api.get<Gym[]>('/admin/gyms');
+      return data;
+    },
+  });
+
+  const gymId = routeGymId || selectedGymId || gyms[0]?.id || '';
   const queryKey = ['gyms', gymId, 'equipment'];
 
-  const { data: equipment = [], isLoading } = useQuery({
+  const {
+    data: equipment = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey,
     enabled: Boolean(gymId),
     queryFn: async () => {
@@ -80,6 +108,9 @@ export default function EquipmentPage() {
       return data;
     },
   });
+
+  const { searchValue, setSearchValue, filteredRows } =
+    useTableSearch(equipment);
 
   const handleError = (error: unknown) => {
     if (axios.isAxiosError(error) && error.response?.status === 409) {
@@ -92,16 +123,24 @@ export default function EquipmentPage() {
 
   const handleSuccess = () => {
     queryClient.invalidateQueries({ queryKey });
-    setIsModalOpen(false);
-    setEditingEquipment(null);
+    close();
     form.resetFields();
   };
+
+  const buildPayload = (values: EquipmentFormValues) => ({
+    name: values.name,
+    type: values.type,
+    minWeight: values.minWeight ?? null,
+    maxWeight: values.maxWeight ?? null,
+    photoUrl: values.photoUrl ?? null,
+    description: values.description ?? null,
+  });
 
   const createMutation = useMutation({
     mutationFn: async (values: EquipmentFormValues) => {
       const { data } = await api.post<Equipment>(
         `/admin/gyms/${gymId}/equipment`,
-        values,
+        buildPayload(values),
       );
       return data;
     },
@@ -119,7 +158,7 @@ export default function EquipmentPage() {
     }) => {
       const { data } = await api.put<Equipment>(
         `/admin/equipment/${id}`,
-        values,
+        buildPayload(values),
       );
       return data;
     },
@@ -158,13 +197,16 @@ export default function EquipmentPage() {
   };
 
   const openCreateModal = () => {
-    setEditingEquipment(null);
+    if (!gymId) {
+      message.warning('Сначала выберите зал');
+      return;
+    }
+
     form.resetFields();
-    setIsModalOpen(true);
+    openCreate();
   };
 
   const openEditModal = (item: Equipment) => {
-    setEditingEquipment(item);
     form.setFieldsValue({
       name: item.name,
       type: item.type,
@@ -173,12 +215,11 @@ export default function EquipmentPage() {
       photoUrl: item.photoUrl ?? undefined,
       description: item.description ?? undefined,
     });
-    setIsModalOpen(true);
+    openEdit(item);
   };
 
   const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingEquipment(null);
+    close();
     form.resetFields();
   };
 
@@ -258,17 +299,59 @@ export default function EquipmentPage() {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Button type="primary" onClick={openCreateModal}>
-        Добавить тренажёр
-      </Button>
+      <Space wrap>
+        {!routeGymId && (
+          <Select
+            style={{ minWidth: 260 }}
+            placeholder="Выберите зал"
+            value={gymId || undefined}
+            onChange={setSelectedGymId}
+            options={gyms.map((gym) => ({ value: gym.id, label: gym.name }))}
+            loading={gymsLoading}
+            showSearch
+            optionFilterProp="label"
+          />
+        )}
 
-      <Table<Equipment>
-        rowKey="id"
-        columns={columns}
-        dataSource={equipment}
-        loading={isLoading}
-        pagination={false}
-      />
+        <Input.Search
+          allowClear
+          placeholder="Поиск по всем полям (от 3 символов)"
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          style={{ width: 280 }}
+        />
+
+        <Button type="primary" onClick={openCreateModal} disabled={!gymId}>
+          Добавить тренажёр
+        </Button>
+      </Space>
+
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить оборудование"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!routeGymId && !gymsLoading && gyms.length === 0 ? (
+        <Empty description="Нет доступных залов. Сначала создайте зал." />
+      ) : !isLoading && !isError && equipment.length === 0 ? (
+        <Empty description="Оборудования пока нет" />
+      ) : (
+        <Table<Equipment>
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredRows}
+          loading={isLoading}
+          pagination={false}
+        />
+      )}
 
       <Modal
         title={editingEquipment ? 'Редактировать тренажёр' : 'Новый тренажёр'}

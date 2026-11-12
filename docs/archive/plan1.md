@@ -1,7 +1,8 @@
-# Process — Gym App
+# Plan 1 — Gym App (статус работ)
 
 Дата фиксации: 2026-11-08
-Источники: `tehzadanie.md`, `docs/er.md`, `docs/api.md`, план работ (промпты 1.1–1.19 и спринты 2–4).
+Обновлено: 2026-11-11
+Источники: `docs/tehzadanie.md`, `docs/er.md`, `docs/api.md`, `docs/new1.md`, план работ (промпты 1.1–1.19 и спринты 2–4).
 
 Легенда статуса:
 - `[x]` — сделано и проверено по коду/файлам
@@ -14,9 +15,11 @@
 
 - Backend: Sprint 1 закрыт. Готовы schema, Prisma, seed, auth, gyms, equipment, upload, exercises, food-products, clients, trainers, client-trainers, weight-measurements, reports и shared `GET /gyms`. `nest build` и typecheck (включая e2e) проходят.
 - Web-admin: каркас, логин, layout, Gyms, Equipment, Exercises, FoodProducts, Clients, Trainers, ClientWeight готовы; страницы Clients/Trainers/ClientWeight приведены к моделям.
-- Backend Спринтов 2–4 реализован: тренировки/шаблоны, результаты, питание, `GET /trainer/clients`, уведомления, FCM push, чат + WebSocket. Flutter-клиент не создан. e2e новых модулей не написаны.
-- В git нет ни одного коммита; `.gitignore` в рабочем дереве удалён.
-- e2e новых модулей написаны, но не прогнаны: локально не поднята БД, `make test` не запускался.
+- Backend Спринтов 2–4 реализован: тренировки/шаблоны, результаты, питание, `GET /trainer/clients`, уведомления, FCM push, чат + WebSocket.
+- Mobile Flutter создан (единое приложение клиент/тренер); `flutter analyze`, `flutter test`, `flutter build apk --debug` проходят.
+- Мультизальность: `TrainerGym`, `ClientGym`, `ClientTrainer.assignedBy/assignedById`, `photoUrl`, `gym-links` — сделано; `Role.RECEPTION`, `Reception` и reception-интерфейсы — нет (см. 3.4).
+- Git: коммиты есть; `.gitignore` восстановлен.
+- e2e: 16 наборов, 118 тестов — все проходят (`pnpm test:e2e`).
 
 ---
 
@@ -94,18 +97,7 @@
 
 ### 3.1. Backend Sprint 1 — закрыт
 
-- `[x] 1.9 Exercises` — `backend/src/exercises/`: DTO, `GET/POST /admin/exercises`, `PUT/DELETE /admin/exercises/:id`, `GET /exercises?type=&muscle_group=&q=` (q — Prisma `contains` insensitive), `exercises.e2e-spec.ts`.
-- `[x] 1.10 FoodProducts` — `backend/src/food-products/`: DTO (kcal/protein/fat/carbs `@Min(0)`), admin CRUD, `food-products.e2e-spec.ts`.
-- `[x] 1.11 Clients + Trainers + Links`:
-  - `backend/src/clients/` — `POST/GET/PUT/DELETE /admin/clients`; транзакция User + Client; 409 на занятый phone; ответ с `initial_password`; список с `active_trainers`, `age`, `currentWeight`, `currentFatMass`;
-  - `backend/src/trainers/` — admin CRUD, role TRAINER, `initial_password`;
-  - `backend/src/client-trainers/` — `POST /admin/clients/:id/trainers`, `DELETE /admin/clients/:id/trainers/:linkId` (soft delete `isActive=false`), 409 на дубль активной связи;
-  - `clients/client-trainers.e2e-spec.ts`.
-- `[x] 1.12 Weight measurements` — `backend/src/weight-measurements/`: `GET/POST /client/:id/weight-measurements` (`@Roles(TRAINER)`, проверка активной связи, 404/403), `measuredBy=userId` из JWT, `weight-measurements.e2e-spec.ts`.
-- `[x] 1.13 Reports` — `backend/src/reports/`: `weight-dynamics`, `exercise-progress` (fallback план→факт, `isActualFallback`), `exercises-summary` (firstWeight/lastWeight/recordsCount), resolveClientId для CLIENT/TRAINER/ADMIN, `reports.e2e-spec.ts`.
-- `[x]` Shared `GET /gyms` — `SharedGymsController` в `backend/src/gyms/gyms.controller.ts`.
-- `[x]` Догоняющие web-страницы: `ClientWeight`, поля профиля клиента (gender, height, startWeight, startFatMass, age, currentWeight, currentFatMass), кнопка «Вес», Trainers по модели; ответ Clients приведён к API (`trainerName`/`gymName`).
-- `[~]` e2e всех новых модулей написаны и типизируются, но не прогнаны: БД локально не поднята.
+Дублирующее описание удалено: состав и статус модулей Sprint 1 см. в разделе 2.5.
 
 ### 3.2. Backend Sprint 2–4 (из ТЗ)
 
@@ -116,16 +108,83 @@
 - `[x]` Уведомления: `POST /admin/notifications` (broadcast по `gym_id` или всем клиентам), `GET /notifications`, `POST /notifications/:id/read` (`backend/src/notifications/`).
 - `[x]` Чат: `GET /chats`, `GET/POST /chats/:id/messages`, WebSocket namespace `/chat` (`chat:join`/`chat:leave`/`chat:send`, событие `chat:message`), один инстанс без Redis pub/sub (`backend/src/chats/`).
 - `[~]` FCM push: `backend/src/notifications/push.service.ts` (firebase-admin, батчи по 500, очистка stale-токенов); `FCM_CREDENTIALS_JSON` добавлена в `.env.example` и `docker-compose.yml`. Реальная отправка с боевыми кредами не проверялась.
-- `[ ]` Mobile Flutter (тренер + клиент) — папка `mobile/` отсутствует; по правилам проекта пока не создаётся.
+- `[x]` Mobile Flutter (тренер + клиент) — `mobile/` создана, единое приложение с ролью при входе; `flutter analyze`, `flutter test`, `flutter build apk --debug` проходят.
 
 ### 3.3. Тесты и проверки
 
 - `[x]` e2e: auth, gyms, equipment.
 - `[x]` e2e: exercises, food-products, clients-trainers, weight-measurements, reports — прогнаны, проходят.
 - `[x]` `nest build` (backend) и `pnpm build` (web-admin) проходят; typecheck e2e-спеков проходит.
-- `[x]` Полный прогон e2e: 8 наборов, 61 тест — все проходят (`pnpm test:e2e`, `--runInBand`, т.к. наборы делят одну БД).
+- `[x]` Полный прогон e2e: 16 наборов, 118 тестов — все проходят (`pnpm test:e2e`, `--runInBand`, т.к. наборы делят одну БД).
 - `[x]` `make test` починен: `Makefile` → `pnpm test:e2e`; в runtime-образ копируются `src` и `jest.config.js`; `test:e2e` запускается последовательно.
 - `[x]` Смоук `make up && make migrate && make seed` + `curl /health` + Swagger: `GET /api/v1/health` → 200 `{"status":"ok"}`, `/api/docs` → 200, `/api/docs-json` → 200.
+
+### 3.4. Мультизальность и роли (из `docs/new1.md`)
+
+- `[~]` Схема: `TrainerGym`, `ClientGym`, `ClientTrainer.assignedBy/assignedById`, `Client.photoUrl`, `Trainer.photoUrl` — сделано; `Role.RECEPTION` и `Reception` — нет.
+- `[ ]` `Role.RECEPTION` в `enum Role`, модель `Reception` + миграция.
+- `[ ]` Seed тестового ресепшена.
+- `[ ]` Auth/`RolesGuard`: роль RECEPTION.
+- `[ ]` `backend/src/receptions/` — CRUD (ADMIN), привязка к залу.
+- `[ ]` `backend/src/reception/` — клиенты/тренеры своего зала, `/reception/*`.
+- `[ ]` `POST /reception/clients/:id/photo`, `POST /reception/trainers/:id/photo` (права по залу).
+- `[~]` `ClientTrainer.assignedBy`: CLIENT/ADMIN — да, RECEPTION — нет.
+- `[x]` `GET /trainer/clients?gym_id=` и проверка общего зала в `POST /trainer/workouts`.
+- `[x]` `/client/gyms`, `/client/gyms/:gymId/trainers`, выбор тренера (`assignedBy=CLIENT`).
+- `[ ]` web-admin: `Receptions`, `ReceptionLayout`, `reception/Clients`, `reception/Trainers`.
+- `[ ]` web-admin: управление залами тренера/клиента (`GymsDrawer`).
+- `[~]` web-admin: назначение тренера есть, отображение `assignedBy` — нет.
+- `[ ]` web-admin: загрузка фото клиента/тренера, меню по роли.
+- `[ ]` mobile: экраны «Мои залы», фильтр клиентов по залу, выбор зала в тренировке, `assignedBy`.
+- `[ ]` mobile: «Мои залы» клиента, выбор тренера в зале, `assignedBy`, календарь с фильтром по залу.
+- `[ ]` e2e: receptions, gym-links, reception isolation, `assignedBy=RECEPTION`.
+- `[ ]` UI-smoke: админ → ресепшен → клиент/тренер; клиент выбирает тренера; изоляция тренера.
+- `[x]` `docs/er.md` и `docs/api.md` обновлены под мультизальность.
+
+### 3.5. План исправлений по аудиту (`docs/bug2.md`)
+
+#### Этап 0 — «зелёное дерево»
+
+- `[ ]` BUG-2.2: добавить `photoUrl` в `CreateClientDto` (или убрать из `clients.service.ts:149,194`).
+- `[ ]` BUG-2.1: ротировать `POSTGRES_PASSWORD`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `ADMIN_PASSWORD`, `DEFAULT_CLIENT_PASSWORD`; `chmod 600 .env`; падать на старте при `changeme*`.
+- `[ ]` BUG-2.4: зарегистрировать `ThrottlerGuard` в `APP_GUARD`, лимиты на login/refresh.
+- `[ ]` BUG-2.12: убрать `ports` у PostgreSQL/Redis или привязать к `127.0.0.1`, `requirepass`.
+- `[ ]` Прогнать `npx tsc --noEmit`, `pnpm test:e2e`, `pnpm build`, `flutter analyze`, `flutter test`.
+
+#### Этап 1 — безопасность и логика
+
+- `[ ]` BUG-2.5: каскадно деактивировать `ClientTrainer` при unlink `TrainerGym`/`ClientGym`; либо требовать активные `TrainerGym + ClientGym + ClientTrainer`.
+- `[ ]` BUG-2.6: транзакционная очистка зависимостей при удалении клиента/тренера или soft-delete.
+- `[ ]` BUG-2.10: добавить `gymId` в проверку оборудования тренировки/шаблона.
+- `[ ]` BUG-2.11: всегда проверять `TrainerGym({trainerId, gymId, isActive:true})`.
+- `[ ]` BUG-2.15: отдавать 409 вместо 500 при удалении `Gym`/`GymEquipment`/`Exercise` со ссылками.
+- `[ ]` BUG-2.14: `distinct` получателей, `@@unique([notificationId,userId])`, уникальность `User.pushToken`.
+- `[ ]` BUG-2.16: `markRead` в чате, блокировка отправки после деактивации связи.
+- `[ ]` BUG-2.17: `helmet`, CORS allowlist, Swagger только вне prod, проверка magic bytes, `nosniff`.
+- `[ ]` BUG-2.13: WS allowlist origin, валидация payload, `MaxLength`, throttle, токен только в `handshake.auth`.
+- `[ ]` BUG-2.18: `forbidNonWhitelisted`, `@MaxLength`, `@Min(0)` для весов, bcrypt 12+, HMAC для refresh, reuse-detection, фиктивный хеш, `algorithms: ['HS256']`.
+
+#### Этап 2 — frontend-паритет
+
+- `[ ]` BUG-2.7: role-guard в web-admin, раздельное меню, 403-страница, проверка роли на логине.
+- `[ ]` BUG-2.8: refresh в httpOnly-cookie, access в памяти.
+- `[ ]` BUG-2.9: admin-эндпоинт замеров или убрать ClientWeight из web-admin.
+- `[ ]` BUG-2.20: error/empty/loading states, отправка `null` для очищенных полей, переход к оборудованию, убрать заглушки.
+- `[ ]` web-admin: управление залами тренера/клиента (`GymsDrawer`), `assignedBy`, загрузка фото.
+- `[ ]` BUG-2.19: mobile — «Мои залы», выбор тренера, фильтр по `gym_id`, `assignedBy`, push тренеру.
+
+#### Этап 3 — уникальность и качество
+
+- `[ ]` BUG-2.21: общий `useCrudModal`/хуки в web-admin; единые утилиты/виджеты в mobile; единый список таймзон.
+- `[ ]` Удалить мёртвый код (`ClientWorkoutEquipment`, неиспользуемый режим редактирования тренировки).
+- `[ ]` Добавить e2e: отзыв доступа, gym-scoping, удаление, уведомления; UI-smoke.
+
+#### Этап 4 — продукт (из `docs/new1.md`)
+
+- `[ ]` `Role.RECEPTION`, модель `Reception`, миграция, seed ресепшена.
+- `[ ]` `backend/src/receptions/`, `backend/src/reception/`, `/reception/*`, фото.
+- `[ ]` web-admin: `Receptions`, `ReceptionLayout`, `reception/Clients`, `reception/Trainers`, меню по роли.
+- `[ ]` e2e receptions/isolation, UI-smoke, тег `sprint-5`.
 
 ---
 4. План действий по разделу 4.1 ТЗ — Администратор (web)
@@ -542,26 +601,3 @@ Fallback план→факт — визуализируется только н�
 
 Порядок 4.1 → 5 → 6 → 7 — жёсткий: без работающего admin API тренерские и клиентские экраны проверить нечем.
 
-
-## 4. Найденные расхождения и риски
-
-1. **`make seed`, скорее всего, не работает.** `Makefile` вызывает `npx prisma db seed`, но в `backend/package.json` нет блока `"prisma": {"seed": "..."}`. Нужно добавить `"prisma": { "seed": "ts-node prisma/seed.ts" }` или заменить команду на `pnpm seed`.
-2. **`backend/Dockerfile` не генерирует Prisma Client и не кладёт schema/migrations в runtime.** В build-стадии нет `prisma generate`, в runtime нет папки `prisma/` и CLI. Это ломает `pnpm build` (типы `@prisma/client`) и `make migrate` (`prisma migrate deploy` внутри контейнера). Нужно добавить `COPY prisma ./prisma`, `RUN npx prisma generate` на этапе сборки и обеспечить доступность Prisma CLI/schema в runtime (либо отдельная migrate-стадия).
-3. **Shared `GET /gyms` добавлен** — `SharedGymsController` в `backend/src/gyms/gyms.controller.ts`, доступен любой авторизованной роли.
-4. **Enum упражнений исправлен:** `web-admin/src/pages/Exercises/index.tsx` приведён к ER — `EQUIPMENT | FREE_WEIGHT | BODYWEIGHT | CARDIO`.
-5. **Страница Clients дополнена по ТЗ 1.19:** добавлены поля gender/height/startWeight/startFatMass, колонки age/currentWeight/currentFatMass, кнопка «Вес», страница `ClientWeight`.
-6. **Страница Trainers приведена к модели:** оставлены только phone/name; birthdate/goal/notes убраны.
-7. **Git:** репозиторий `/opt/compose/gym-app/.git` существует, но коммитов нет (`master` без коммитов). `.gitignore` удалён из рабочего дерева — риск закоммитить `node_modules/`, `dist/`, `.env`.
-8. **Schema добавляет `createdAt` ряду моделей, где его нет в ER** (GymEquipment, Exercise, FoodProduct, Client, Trainer, WorkoutTemplate). На работу не влияет, но формально это отклонение от «строго по ER».
-9. **Redis подключён в compose, но ещё не используется** — задел под спринт 4.
-10. **`FCM_CREDENTIALS_JSON` добавлена** в `.env.example` и `docker-compose.yml`; для боевого push нужен реальный JSON сервисного аккаунта.
-
----
-
-## 5. Рекомендуемый порядок дальнейших шагов
-
-1. Починить инфраструктуру: Prisma generate + schema/migrations в Dockerfile, `prisma.seed` в `package.json`, вернуть `.gitignore`, сделать первый коммит.
-2. Backend Sprint 1 закрыт (1.9–1.13 + shared `GET /gyms`) — осталось прогнать e2e на поднятой БД.
-3. Привести web-admin в соответствие: исправить enum упражнений, дополнить Clients полями профиля и страницей ClientWeight, упростить Trainers.
-4. Прогнать `make down && make up && make test`, смоук через Swagger и браузер.
-5. Переходить к Sprint 2 (тренировки/шаблоны/календарь), затем Sprint 3 (питание, Flutter, графики), затем Sprint 4 (чат, FCM).

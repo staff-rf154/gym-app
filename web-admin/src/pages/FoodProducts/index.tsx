@@ -1,6 +1,7 @@
-import { useState } from 'react';
 import {
+  Alert,
   Button,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -13,6 +14,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
+import { useCrudModal } from '../../hooks/useCrudModal';
+import { useTableSearch } from '../../hooks/useTableSearch';
 
 interface FoodProduct {
   id: string;
@@ -34,10 +37,20 @@ interface FoodProductFormValues {
 export default function FoodProductsPage() {
   const [form] = Form.useForm<FoodProductFormValues>();
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<FoodProduct | null>(null);
+  const {
+    open: isModalOpen,
+    editing: editingProduct,
+    openCreate,
+    openEdit,
+    close,
+  } = useCrudModal<FoodProduct>();
 
-  const { data: products = [], isLoading } = useQuery({
+  const {
+    data: products = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['food-products'],
     queryFn: async () => {
       const { data } = await api.get<FoodProduct[]>('/admin/food-products');
@@ -45,14 +58,16 @@ export default function FoodProductsPage() {
     },
   });
 
+  const { searchValue, setSearchValue, filteredRows } =
+    useTableSearch(products);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['food-products'] });
   };
 
   const handleSuccess = () => {
     invalidate();
-    setIsModalOpen(false);
-    setEditingProduct(null);
+    close();
     form.resetFields();
   };
 
@@ -96,13 +111,11 @@ export default function FoodProductsPage() {
   });
 
   const openCreateModal = () => {
-    setEditingProduct(null);
     form.resetFields();
-    setIsModalOpen(true);
+    openCreate();
   };
 
   const openEditModal = (product: FoodProduct) => {
-    setEditingProduct(product);
     form.setFieldsValue({
       name: product.name,
       kcal: product.kcal,
@@ -110,12 +123,11 @@ export default function FoodProductsPage() {
       fat: product.fat,
       carbs: product.carbs,
     });
-    setIsModalOpen(true);
+    openEdit(product);
   };
 
   const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingProduct(null);
+    close();
     form.resetFields();
   };
 
@@ -180,17 +192,44 @@ export default function FoodProductsPage() {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Button type="primary" onClick={openCreateModal}>
-        Добавить продукт
-      </Button>
+      <Space wrap>
+        <Input.Search
+          allowClear
+          placeholder="Поиск по всем полям (от 3 символов)"
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+          style={{ width: 280 }}
+        />
 
-      <Table<FoodProduct>
-        rowKey="id"
-        columns={columns}
-        dataSource={products}
-        loading={isLoading}
-        pagination={false}
-      />
+        <Button type="primary" onClick={openCreateModal}>
+          Добавить продукт
+        </Button>
+      </Space>
+
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Не удалось загрузить продукты"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && products.length === 0 ? (
+        <Empty description="Продуктов пока нет" />
+      ) : (
+        <Table<FoodProduct>
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredRows}
+          loading={isLoading}
+          pagination={false}
+        />
+      )}
 
       <Modal
         title={editingProduct ? 'Редактировать продукт' : 'Новый продукт'}

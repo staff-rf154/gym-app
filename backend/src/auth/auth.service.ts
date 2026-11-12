@@ -7,7 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Role, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import type { RefreshPayload } from './strategies/jwt-refresh.strategy';
@@ -15,7 +15,9 @@ import type { RefreshPayload } from './strategies/jwt-refresh.strategy';
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL = '30d';
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const BCRYPT_ROUNDS = 10;
+const BCRYPT_ROUNDS = 12;
+const DUMMY_PASSWORD_HASH =
+  '$2b$12$6k8AKbZBQc8e064Ju6T6DuYbgMICWyrkxQ/n4/daFR.wOE0gmtXbO';
 
 export interface TokenResponse {
   access_token: string;
@@ -46,6 +48,7 @@ export class AuthService {
     });
 
     if (!user) {
+      await bcrypt.compare(dto.password, DUMMY_PASSWORD_HASH);
       throw new UnauthorizedException('Invalid phone or password');
     }
 
@@ -69,7 +72,17 @@ export class AuthService {
       where: { id: payload.jti },
     });
 
-    if (!storedToken || storedToken.userId !== payload.sub) {
+    if (!storedToken) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: payload.sub },
+      });
+      throw new UnauthorizedException('Refresh token reuse detected');
+    }
+
+    if (storedToken.userId !== payload.sub) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: payload.sub },
+      });
       throw new UnauthorizedException('Invalid refresh token');
     }
 
@@ -80,12 +93,16 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token expired');
     }
 
-    const isTokenValid = await bcrypt.compare(
-      refreshToken,
-      storedToken.tokenHash,
-    );
+    const expectedHash = Buffer.from(storedToken.tokenHash, 'hex');
+    const actualHash = Buffer.from(this.hashRefreshToken(refreshToken), 'hex');
 
-    if (!isTokenValid) {
+    if (
+      expectedHash.length !== actualHash.length ||
+      !timingSafeEqual(expectedHash, actualHash)
+    ) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: payload.sub },
+      });
       throw new UnauthorizedException('Invalid refresh token');
     }
 
@@ -138,10 +155,25 @@ export class AuthService {
   }
 
   async updatePushToken(userId: string, token: string): Promise<void> {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { pushToken: token },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.updateMany({
+        where: { pushToken: token, id: { not: userId } },
+        data: { pushToken: null },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { pushToken: token },
+      });
     });
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHmac(
+      'sha256',
+      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+    )
+      .update(token)
+      .digest('hex');
   }
 
   private async issueTokens(user: User): Promise<TokenResponse> {
@@ -165,7 +197,7 @@ export class AuthService {
       },
     );
 
-    const tokenHash = await bcrypt.hash(refreshToken, BCRYPT_ROUNDS);
+    const tokenHash = this.hashRefreshToken(refreshToken);
 
     await this.prisma.refreshToken.create({
       data: {
