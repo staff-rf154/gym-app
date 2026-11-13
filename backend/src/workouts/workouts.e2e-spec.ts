@@ -437,11 +437,11 @@ describe('Workouts (e2e)', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(2);
+    expect(response.body.items).toHaveLength(2);
     expect(
-      response.body.map((workout: { id: string }) => workout.id),
+      response.body.items.map((workout: { id: string }) => workout.id),
     ).toEqual([workoutId, secondWorkoutId]);
-    expect(response.body[0]).toMatchObject({
+    expect(response.body.items[0]).toMatchObject({
       id: workoutId,
       clientName: expect.any(String),
       gymName: expect.any(String),
@@ -454,9 +454,9 @@ describe('Workouts (e2e)', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.body.map((workout: { id: string }) => workout.id)).toEqual([
-      workoutId,
-    ]);
+    expect(
+      response.body.items.map((workout: { id: string }) => workout.id),
+    ).toEqual([workoutId]);
   });
 
   it('GET /trainer/workouts/:id своей тренировки → 200', async () => {
@@ -483,9 +483,9 @@ describe('Workouts (e2e)', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(2);
+    expect(response.body.items).toHaveLength(2);
     expect(
-      response.body.map((workout: { id: string }) => workout.id),
+      response.body.items.map((workout: { id: string }) => workout.id),
     ).toEqual([secondWorkoutId, workoutId]);
   });
 

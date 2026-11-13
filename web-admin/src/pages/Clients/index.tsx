@@ -32,6 +32,7 @@ import {
 import { formatDate } from '../../utils/format';
 import { useCrudModal } from '../../hooks/useCrudModal';
 import { useTableSearch } from '../../hooks/useTableSearch';
+import type { PaginatedResponse } from '../../types/pagination';
 
 interface TrainerLink {
   id: string;
@@ -142,8 +143,8 @@ export default function ClientsPage() {
   } = useQuery({
     queryKey: ['clients'],
     queryFn: async () => {
-      const { data } = await api.get<Client[]>('/admin/clients');
-      return data;
+      const { data } = await api.get<PaginatedResponse<Client>>('/admin/clients', { params: { limit: 100 } });
+      return data.items;
     },
   });
 
@@ -153,8 +154,8 @@ export default function ClientsPage() {
   const { data: trainers = [] } = useQuery({
     queryKey: ['trainers'],
     queryFn: async () => {
-      const { data } = await api.get<TrainerOption[]>('/admin/trainers');
-      return data;
+      const { data } = await api.get<PaginatedResponse<TrainerOption>>('/admin/trainers', { params: { limit: 100 } });
+      return data.items;
     },
   });
 

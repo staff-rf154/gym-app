@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../../api/client';
+import type { PaginatedResponse } from '../../types/pagination';
 import { useAuthStore } from '../../store/auth';
 
 export interface ReportOption {
@@ -31,10 +32,11 @@ export function useReportLookups() {
     queryKey: ['report-trainers', role],
     enabled: isAdmin || isReception,
     queryFn: async () => {
-      const { data } = await api.get<ReportOption[]>(
+      const { data } = await api.get<PaginatedResponse<ReportOption>>(
         isAdmin ? '/admin/trainers' : '/reception/trainers',
+        { params: { limit: 100 } },
       );
-      return data.map((trainer) => ({ id: trainer.id, name: trainer.name }));
+      return data.items.map((trainer) => ({ id: trainer.id, name: trainer.name }));
     },
   });
 
@@ -47,8 +49,14 @@ export function useReportLookups() {
         : isReception
           ? '/reception/clients'
           : '/trainer/clients';
-      const { data } = await api.get<ReportOption[]>(path);
-      return data.map((client) => ({ id: client.id, name: client.name }));
+      if (isTrainer) {
+        const { data } = await api.get<ReportOption[]>(path);
+        return data.map((client) => ({ id: client.id, name: client.name }));
+      }
+      const { data } = await api.get<PaginatedResponse<ReportOption>>(path, {
+        params: { limit: 100 },
+      });
+      return data.items.map((client) => ({ id: client.id, name: client.name }));
     },
   });
 

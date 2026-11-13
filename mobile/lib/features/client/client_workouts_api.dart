@@ -10,11 +10,16 @@ class ClientWorkoutsApi {
     required DateTime from,
     required DateTime to,
   }) async {
-    final response = await _api.dio.get<List<dynamic>>(
+    final response = await _api.dio.get<Map<String, dynamic>>(
       '/client/workouts',
-      queryParameters: {'from': _dateOnly(from), 'to': _dateOnly(to)},
+      queryParameters: {
+        'from': _dateOnly(from),
+        'to': _dateOnly(to),
+        'limit': 100,
+      },
     );
-    return (response.data ?? const [])
+    final items = (response.data?['items'] as List<dynamic>?) ?? const [];
+    return items
         .cast<Map<String, dynamic>>()
         .map(ClientWorkout.fromJson)
         .toList();

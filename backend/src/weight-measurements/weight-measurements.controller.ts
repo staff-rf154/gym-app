@@ -66,6 +66,10 @@ export class AdminWeightMeasurementsController {
     @Param('id', ParseUUIDPipe) clientId: string,
     @Body() dto: CreateWeightMeasurementDto,
   ): Promise<WeightMeasurement> {
-    return this.weightMeasurementsService.createForAdmin(userId, clientId, dto);
+    return this.weightMeasurementsService.createForAdmin(
+      userId,
+      clientId,
+      dto,
+    );
   }
 }

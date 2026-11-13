@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Goal, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_TTL, RedisService } from '../redis/redis.service';
 import { CreateGoalDto } from './dto/create-goal.dto';
 import { UpdateGoalDto } from './dto/update-goal.dto';
 
@@ -17,19 +18,26 @@ export interface ClientGoalResponse {
 
 @Injectable()
 export class GoalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   findAll(): Promise<Goal[]> {
-    return this.prisma.goal.findMany({
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    });
+    return this.redis.getOrSet('cache:goals:all', CACHE_TTL.reference, () =>
+      this.prisma.goal.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+    );
   }
 
   findActive(): Promise<Goal[]> {
-    return this.prisma.goal.findMany({
-      where: { isActive: true },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    });
+    return this.redis.getOrSet('cache:goals:active', CACHE_TTL.reference, () =>
+      this.prisma.goal.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+    );
   }
 
   async findOne(id: string): Promise<Goal> {

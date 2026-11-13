@@ -1,7 +1,8 @@
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsUUID, Matches } from 'class-validator';
 
-export class TrainerWorkoutsQueryDto {
+export class TrainerWorkoutsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID()

@@ -152,11 +152,14 @@ describe('Workout templates (e2e)', () => {
     await prisma.$disconnect();
   });
 
-  it('GET /trainer/templates изначально пустой', async () => {
+  it('GET /trainer/templates изначально не содержит личных шаблонов', async () => {
     const response = await authed(trainerToken).get('/trainer/templates');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    const personal = (response.body as Array<{ trainerId: string | null }>).filter(
+      (template) => template.trainerId !== null,
+    );
+    expect(personal).toEqual([]);
   });
 
   it('POST /trainer/templates создаёт шаблон', async () => {
@@ -197,8 +200,11 @@ describe('Workout templates (e2e)', () => {
     const response = await authed(trainerToken).get('/trainer/templates');
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    expect(response.body[0].id).toBe(templateId);
+    const personal = (response.body as Array<{ id: string; trainerId: string | null }>).filter(
+      (template) => template.trainerId !== null,
+    );
+    expect(personal).toHaveLength(1);
+    expect(personal[0].id).toBe(templateId);
   });
 
   it('GET /trainer/templates/:id возвращает шаблон с items', async () => {
@@ -262,8 +268,11 @@ describe('Workout templates (e2e)', () => {
     expect(response.status).toBe(204);
 
     const list = await authed(trainerToken).get('/trainer/templates');
+    const personal = (list.body as Array<{ trainerId: string | null }>).filter(
+      (template) => template.trainerId !== null,
+    );
 
-    expect(list.body).toEqual([]);
+    expect(personal).toEqual([]);
   });
 
   it('GET /trainer/templates/:id удалённого шаблона → 404', async () => {

@@ -470,19 +470,19 @@ describe('Reports equipment usage (e2e)', () => {
   it('ADMIN: фильтры по залу, тренеру и клиенту', async () => {
     const byGym = await authedGet(
       adminToken,
-      `/reports/equipment-usage?gym_id=${gymId}`,
+      `/reports/equipment-usage?from=2027-10-01&to=2027-10-31&gym_id=${gymId}`,
     );
     expect(byGym.body.totalUsage).toBe(3);
 
     const byTrainer = await authedGet(
       adminToken,
-      `/reports/equipment-usage?trainer_id=${trainerId}`,
+      `/reports/equipment-usage?from=2027-10-01&to=2027-10-31&trainer_id=${trainerId}`,
     );
     expect(byTrainer.body.totalUsage).toBe(3);
 
     const byClient = await authedGet(
       adminToken,
-      `/reports/equipment-usage?client_id=${otherClientId}`,
+      `/reports/equipment-usage?from=2027-10-01&to=2027-10-31&client_id=${otherClientId}`,
     );
     expect(byClient.body.totalUsage).toBe(1);
   });
@@ -516,6 +516,12 @@ describe('Reports equipment usage (e2e)', () => {
           item.equipmentId !== machineId,
       ),
     ).toBe(true);
+  });
+
+  it('ADMIN без периода → 400', async () => {
+    const response = await authedGet(adminToken, '/reports/equipment-usage');
+
+    expect(response.status).toBe(400);
   });
 
   it('CLIENT не имеет доступа к отчёту по тренажёрам', async () => {

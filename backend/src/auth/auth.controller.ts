@@ -8,6 +8,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -16,6 +17,7 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthService, MeResponse, TokenResponse } from './auth.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { UpdatePushTokenDto } from './dto/update-push-token.dto';
@@ -24,6 +26,8 @@ import type { RefreshPayload } from './strategies/jwt-refresh.strategy';
 
 interface RequestWithRefreshUser {
   user: RefreshPayload;
+  headers?: { cookie?: string };
+  body?: { refresh_token?: string };
 }
 
 interface ResponseWithCookie {
@@ -32,22 +36,52 @@ interface ResponseWithCookie {
     value: string,
     options: Record<string, unknown>,
   ) => void;
+  clearCookie: (name: string, options: Record<string, unknown>) => void;
 }
 
 const REFRESH_COOKIE = 'refresh_token';
 const REFRESH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+
+const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'strict' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/api/v1/auth',
+};
 
 function setRefreshCookie(
   response: ResponseWithCookie,
   token: string,
 ): void {
   response.cookie(REFRESH_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/api/v1/auth',
+    ...REFRESH_COOKIE_OPTIONS,
     maxAge: REFRESH_COOKIE_MAX_AGE,
   });
+}
+
+function clearRefreshCookie(response: ResponseWithCookie): void {
+  response.clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_OPTIONS);
+}
+
+function extractRefreshToken(
+  request: RequestWithRefreshUser,
+): string | undefined {
+  const cookieHeader = request.headers?.cookie;
+  const cookies = cookieHeader
+    ? cookieHeader.split(';').reduce<Record<string, string>>((acc, part) => {
+        const index = part.indexOf('=');
+
+        if (index > 0) {
+          acc[part.slice(0, index).trim()] = decodeURIComponent(
+            part.slice(index + 1).trim(),
+          );
+        }
+
+        return acc;
+      }, {})
+    : {};
+
+  return cookies[REFRESH_COOKIE] ?? request.body?.refresh_token;
 }
 
 @ApiTags('auth')
@@ -80,12 +114,47 @@ export class AuthController {
     @Req() request: RequestWithRefreshUser,
     @Res({ passthrough: true }) response: ResponseWithCookie,
   ): Promise<TokenResponse> {
+    const refreshToken = extractRefreshToken(request) ?? dto.refresh_token;
+
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token missing');
+    }
+
     const tokens = await this.authService.refresh(
-      dto.refresh_token ?? '',
+      refreshToken,
       request.user,
     );
     setRefreshCookie(response, tokens.refresh_token);
     return tokens;
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Выход и отзыв refresh-токенов' })
+  async logout(
+    @CurrentUser('userId') userId: string,
+    @Res({ passthrough: true }) response: ResponseWithCookie,
+  ): Promise<void> {
+    await this.authService.logout(userId);
+    clearRefreshCookie(response);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Сменить свой пароль' })
+  async changePassword(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) response: ResponseWithCookie,
+  ): Promise<void> {
+    await this.authService.changePassword(
+      userId,
+      dto.current_password,
+      dto.new_password,
+    );
+    clearRefreshCookie(response);
   }
 
   @Get('me')

@@ -9,9 +9,14 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Message, Role } from '@prisma/client';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ChatResponse, ChatsService } from './chats.service';
+import { CreateChatDto } from './dto/create-chat.dto';
 import { MessagesQueryDto, SendMessageDto } from './dto/message.dto';
 
 @ApiTags('shared')
@@ -26,8 +31,19 @@ export class ChatsController {
   findAll(
     @CurrentUser('userId') userId: string,
     @CurrentUser('role') role: Role,
-  ): Promise<ChatResponse[]> {
-    return this.chatsService.findChats(userId, role);
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ChatResponse>> {
+    return this.chatsService.findChats(userId, role, query);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Создать или получить чат' })
+  create(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: Role,
+    @Body() dto: CreateChatDto,
+  ): Promise<ChatResponse> {
+    return this.chatsService.createChat(userId, role, dto);
   }
 
   @Get(':id/messages')

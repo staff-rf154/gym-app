@@ -24,6 +24,29 @@ class TemplatesScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _showSharedInfo(
+    BuildContext context,
+    WorkoutTemplate template,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(template.name),
+        content: const Text(
+          'Общий шаблон создан администратором или ресепшеном. '
+          'Его можно применить при составлении тренировки, '
+          'но нельзя редактировать или удалять.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _delete(
     BuildContext context,
     WidgetRef ref,
@@ -32,9 +55,10 @@ class TemplatesScreen extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Удалить шаблон?'),
+        title: const Text('Архивировать шаблон?'),
         content: Text(
-          '«${template.name}» будет удалён без возможности отмены.',
+          '«${template.name}» исчезнет из списка. '
+          'История тренировок сохранится.',
         ),
         actions: [
           TextButton(
@@ -57,7 +81,7 @@ class TemplatesScreen extends ConsumerWidget {
       ref.invalidate(templatesProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Шаблон удалён')));
+            .showSnackBar(const SnackBar(content: Text('Шаблон архивирован')));
       }
     } catch (error) {
       if (context.mounted) {
@@ -82,8 +106,12 @@ class TemplatesScreen extends ConsumerWidget {
         AsyncData(:final value) => _TemplatesList(
           templates: value,
           onRefresh: () async => ref.invalidate(templatesProvider),
-          onEdit: (template) => _openEditor(context, ref, template),
-          onDelete: (template) => _delete(context, ref, template),
+          onEdit: (template) => template.isPersonal
+              ? _openEditor(context, ref, template)
+              : _showSharedInfo(context, template),
+          onDelete: (template) => template.isPersonal
+              ? _delete(context, ref, template)
+              : _showSharedInfo(context, template),
         ),
         AsyncError(:final error) => Center(
           child: Padding(
@@ -149,17 +177,20 @@ class _TemplatesList extends StatelessWidget {
             title: Text(template.name),
             subtitle: Text(
               [
+                template.scopeLabel,
                 'Упражнений: ${template.items.length}',
                 if (template.description != null &&
                     template.description!.isNotEmpty)
                   template.description!,
               ].join(' · '),
             ),
-            trailing: IconButton(
-              onPressed: () => onDelete(template),
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Удалить',
-            ),
+            trailing: template.isPersonal
+                ? IconButton(
+                    onPressed: () => onDelete(template),
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Архивировать',
+                  )
+                : const Icon(Icons.lock_outline),
             onTap: () => onEdit(template),
           );
         },

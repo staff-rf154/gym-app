@@ -13,12 +13,15 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role, WorkoutItemResult } from '@prisma/client';
+import { PaginatedResponse } from '../common/dto/pagination-query.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ClientWorkoutsQueryDto } from './dto/client-workouts-query.dto';
+import { CreateAdminWorkoutTemplateDto } from './dto/create-admin-workout-template.dto';
 import { CreateWorkoutTemplateDto } from './dto/create-workout-template.dto';
 import { CreateWorkoutDto } from './dto/create-workout.dto';
 import { TrainerWorkoutsQueryDto } from './dto/trainer-workouts-query.dto';
+import { UpdateAdminWorkoutTemplateDto } from './dto/update-admin-workout-template.dto';
 import { UpdateWorkoutItemResultDto } from './dto/update-workout-item-result.dto';
 import { UpdateWorkoutTemplateDto } from './dto/update-workout-template.dto';
 import {
@@ -26,6 +29,91 @@ import {
   WorkoutTemplateResponse,
   WorkoutsService,
 } from './workouts.service';
+
+@ApiTags('admin')
+@ApiBearerAuth()
+@Roles(Role.ADMIN)
+@Controller('admin/templates')
+export class AdminTemplatesController {
+  constructor(private readonly workoutsService: WorkoutsService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Глобальные шаблоны и шаблоны залов' })
+  findAll(): Promise<WorkoutTemplateResponse[]> {
+    return this.workoutsService.findAdminTemplates();
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Создать глобальный шаблон или шаблон зала' })
+  create(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: CreateAdminWorkoutTemplateDto,
+  ): Promise<WorkoutTemplateResponse> {
+    return this.workoutsService.createAdminTemplate(userId, dto);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Обновить шаблон' })
+  update(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAdminWorkoutTemplateDto,
+  ): Promise<WorkoutTemplateResponse> {
+    return this.workoutsService.updateAdminTemplate(userId, id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Архивировать шаблон' })
+  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.workoutsService.removeAdminTemplate(id);
+  }
+}
+
+@ApiTags('reception')
+@ApiBearerAuth()
+@Roles(Role.RECEPTION)
+@Controller('reception/templates')
+export class ReceptionTemplatesController {
+  constructor(private readonly workoutsService: WorkoutsService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Шаблоны моего зала' })
+  findAll(
+    @CurrentUser('userId') userId: string,
+  ): Promise<WorkoutTemplateResponse[]> {
+    return this.workoutsService.findReceptionTemplates(userId);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Создать шаблон тренировки для своего зала' })
+  create(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: CreateWorkoutTemplateDto,
+  ): Promise<WorkoutTemplateResponse> {
+    return this.workoutsService.createReceptionTemplate(userId, dto);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Обновить шаблон своего зала' })
+  update(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateWorkoutTemplateDto,
+  ): Promise<WorkoutTemplateResponse> {
+    return this.workoutsService.updateReceptionTemplate(userId, id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Архивировать шаблон своего зала' })
+  async remove(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    await this.workoutsService.removeReceptionTemplate(userId, id);
+  }
+}
 
 @ApiTags('trainer')
 @ApiBearerAuth()
@@ -72,7 +160,7 @@ export class TrainerTemplatesController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Удалить шаблон тренировки' })
+  @ApiOperation({ summary: 'Архивировать личный шаблон тренировки' })
   async remove(
     @CurrentUser('userId') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
@@ -93,7 +181,7 @@ export class TrainerWorkoutsController {
   findAll(
     @CurrentUser('userId') userId: string,
     @Query() query: TrainerWorkoutsQueryDto,
-  ): Promise<WorkoutResponse[]> {
+  ): Promise<PaginatedResponse<WorkoutResponse>> {
     return this.workoutsService.trainerWorkouts(userId, query);
   }
 
@@ -158,7 +246,7 @@ export class ClientWorkoutsController {
   findAll(
     @CurrentUser('userId') userId: string,
     @Query() query: ClientWorkoutsQueryDto,
-  ): Promise<WorkoutResponse[]> {
+  ): Promise<PaginatedResponse<WorkoutResponse>> {
     return this.workoutsService.clientWorkouts(userId, query);
   }
 

@@ -6,20 +6,23 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Gender, Goal, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 const BCRYPT_ROUNDS = 12;
-const FALLBACK_PASSWORD = 'ChangeMe123!';
 
 const clientInclude = {
-  user: true,
+  user: { select: { phone: true, name: true } },
   goalRef: true,
   clientTrainers: {
     where: { isActive: true },
     include: {
-      trainer: { include: { user: true } },
+      trainer: { include: { user: { select: { name: true } } } },
       gym: true,
     },
   },
@@ -119,19 +122,37 @@ export class ClientsService {
     private readonly configService: ConfigService,
   ) {}
 
-  async findAll(): Promise<ClientResponse[]> {
-    const clients = await this.prisma.client.findMany({
-      include: clientInclude,
-      orderBy: { createdAt: 'asc' },
-    });
+  async findAll(
+    gymId?: string,
+    query: PaginationQueryDto = new PaginationQueryDto(),
+  ): Promise<PaginatedResponse<ClientResponse>> {
+    const where: Prisma.ClientWhereInput = gymId
+      ? { clientGyms: { some: { gymId, isActive: true } } }
+      : {};
 
-    return clients.map((client) => this.toResponse(client));
+    const [clients, total] = await this.prisma.$transaction([
+      this.prisma.client.findMany({
+        where,
+        include: clientInclude,
+        orderBy: { createdAt: 'asc' },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.client.count({ where }),
+    ]);
+
+    return {
+      items: clients.map((client) => this.toResponse(client, gymId)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
   }
 
-  async findOne(id: string): Promise<ClientResponse> {
+  async findOne(id: string, gymId?: string): Promise<ClientResponse> {
     const client = await this.findEntity(id);
 
-    return this.toResponse(client);
+    return this.toResponse(client, gymId);
   }
 
   async create(
@@ -217,8 +238,6 @@ export class ClientsService {
             gender: dto.gender,
             height: dto.height,
             birthdate: parseBirthdate(dto.birthdate),
-            startWeight: dto.startWeight,
-            startFatMass: dto.startFatMass,
             goal: goal?.name ?? dto.goal,
             goalId: goal?.id,
             notes: dto.notes,
@@ -231,6 +250,27 @@ export class ClientsService {
     }
 
     return this.findOne(id);
+  }
+
+  async resetPassword(
+    id: string,
+    password?: string,
+  ): Promise<{ new_password: string }> {
+    const client = await this.findEntity(id);
+    const newPassword = password ?? this.getInitialPassword();
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: client.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshToken.deleteMany({
+        where: { userId: client.userId },
+      }),
+    ]);
+
+    return { new_password: newPassword };
   }
 
   async remove(id: string): Promise<void> {
@@ -284,8 +324,17 @@ export class ClientsService {
     return client;
   }
 
-  private toResponse(client: ClientWithRelations): ClientResponse {
+  private toResponse(
+    client: ClientWithRelations,
+    gymId?: string,
+  ): ClientResponse {
     const lastMeasurement = client.weightMeasurements[0];
+    const clientGyms = gymId
+      ? client.clientGyms.filter((link) => link.gymId === gymId)
+      : client.clientGyms;
+    const clientTrainers = gymId
+      ? client.clientTrainers.filter((link) => link.gymId === gymId)
+      : client.clientTrainers;
 
     return {
       id: client.id,
@@ -310,14 +359,14 @@ export class ClientsService {
         : null,
       goalText: client.goal,
       notes: client.notes,
-      gyms: client.clientGyms.map((link) => ({
+      gyms: clientGyms.map((link) => ({
         id: link.id,
         gymId: link.gymId,
         gymName: link.gym.name,
         gymAddress: link.gym.address,
         isActive: link.isActive,
       })),
-      active_trainers: client.clientTrainers.map((link) => ({
+      active_trainers: clientTrainers.map((link) => ({
         id: link.id,
         trainerId: link.trainerId,
         trainerName: link.trainer.user.name,
@@ -346,10 +395,7 @@ export class ClientsService {
   }
 
   private getInitialPassword(): string {
-    return (
-      this.configService.get<string>('DEFAULT_CLIENT_PASSWORD') ??
-      FALLBACK_PASSWORD
-    );
+    return this.configService.getOrThrow<string>('DEFAULT_CLIENT_PASSWORD');
   }
 
   private async ensurePhoneAvailable(phone: string): Promise<void> {

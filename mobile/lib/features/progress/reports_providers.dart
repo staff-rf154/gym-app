@@ -9,19 +9,19 @@ final reportsApiProvider = Provider<ReportsApi>(
 );
 
 final weightDynamicsProvider =
-    FutureProvider.family<List<WeightDynamicsPoint>, String>(
+    FutureProvider.autoDispose.family<List<WeightDynamicsPoint>, String>(
       (ref, clientId) =>
           ref.watch(reportsApiProvider).fetchWeightDynamics(clientId),
     );
 
 final exercisesSummaryProvider =
-    FutureProvider.family<List<ExerciseSummaryItem>, String>(
+    FutureProvider.autoDispose.family<List<ExerciseSummaryItem>, String>(
       (ref, clientId) =>
           ref.watch(reportsApiProvider).fetchExercisesSummary(clientId),
     );
 
 final exerciseProgressProvider =
-    FutureProvider.family<
+    FutureProvider.autoDispose.family<
       ExerciseProgress,
       ({String clientId, String exerciseId})
     >(

@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '../../api/client';
 import { useCrudModal } from '../../hooks/useCrudModal';
+import { useAuthStore } from '../../store/auth';
 
 interface WeightMeasurement {
   id: string;
@@ -43,6 +44,14 @@ const formatDateTime = (value: string) =>
 
 export default function ClientWeightPage() {
   const { id } = useParams<{ id: string }>();
+  const role = useAuthStore((state) => state.user?.role);
+  const isReception = role === 'RECEPTION';
+  const weightPath = isReception
+    ? `/reception/clients/${id}/weight-measurements`
+    : `/admin/clients/${id}/weight-measurements`;
+  const backPath = isReception
+    ? '/protected/reception/clients'
+    : '/protected/clients';
   const location = useLocation();
   const navigate = useNavigate();
   const [form] = Form.useForm<MeasurementFormValues>();
@@ -61,7 +70,7 @@ export default function ClientWeightPage() {
     enabled: Boolean(id),
     queryFn: async () => {
       const { data } = await api.get<WeightMeasurement[]>(
-        `/admin/clients/${id}/weight-measurements`,
+        weightPath,
       );
       return data;
     },
@@ -70,7 +79,7 @@ export default function ClientWeightPage() {
   const createMutation = useMutation({
     mutationFn: async (values: MeasurementFormValues) => {
       const { data } = await api.post<WeightMeasurement>(
-        `/admin/clients/${id}/weight-measurements`,
+        weightPath,
         {
           weight: values.weight,
           fatMass: values.fatMass ?? null,
@@ -132,7 +141,7 @@ export default function ClientWeightPage() {
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Space>
-        <Button onClick={() => navigate('/protected/clients')}>Назад</Button>
+        <Button onClick={() => navigate(backPath)}>Назад</Button>
         <Typography.Title level={4} style={{ margin: 0 }}>
           {clientName ? `Замеры веса: ${clientName}` : 'Замеры веса'}
         </Typography.Title>

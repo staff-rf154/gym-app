@@ -277,7 +277,7 @@ describe('Clients, Trainers and links (e2e)', () => {
     const response = await authed(adminToken).get('/admin/trainers');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual(
+    expect(response.body.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: newTrainerId,
@@ -291,6 +291,31 @@ describe('Clients, Trainers and links (e2e)', () => {
         }),
       ]),
     );
+  });
+
+  it('GET /admin/trainers?page=1&limit=1 отдаёт пагинацию', async () => {
+    const response = await authed(adminToken).get(
+      '/admin/trainers?page=1&limit=1',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ page: 1, limit: 1 });
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it('GET /admin/clients?limit=101 → 400', async () => {
+    const response = await authed(adminToken).get(
+      '/admin/clients?limit=101',
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('GET /admin/clients?page=0 → 400', async () => {
+    const response = await authed(adminToken).get('/admin/clients?page=0');
+
+    expect(response.status).toBe(400);
   });
 
   it('POST /admin/clients/:id/trainers создаёт связь', async () => {
@@ -321,7 +346,7 @@ describe('Clients, Trainers and links (e2e)', () => {
     const response = await authed(adminToken).get('/admin/clients');
 
     expect(response.status).toBe(200);
-    const client = response.body.find(
+    const client = response.body.items.find(
       (item: { id: string }) => item.id === clientId,
     );
 
@@ -349,7 +374,7 @@ describe('Clients, Trainers and links (e2e)', () => {
     expect(link?.isActive).toBe(false);
 
     const list = await authed(adminToken).get('/admin/clients');
-    const client = list.body.find(
+    const client = list.body.items.find(
       (item: { id: string }) => item.id === clientId,
     );
     expect(client.active_trainers).toEqual([]);

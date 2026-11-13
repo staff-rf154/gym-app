@@ -224,7 +224,7 @@ describe('Reception isolation and access revocation (e2e)', () => {
     const clients = await authed(receptionBToken)
       .get('/reception/clients')
       .expect(200);
-    expect(clients.body).toEqual([]);
+    expect(clients.body.items).toEqual([]);
 
     await authed(receptionBToken)
       .put(`/reception/clients/${clientId}`)

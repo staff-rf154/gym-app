@@ -9,11 +9,16 @@ import {
   Prisma,
   WorkoutStatus,
 } from '@prisma/client';
+import {
+  PaginatedResponse,
+} from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientWorkoutsQueryDto } from './dto/client-workouts-query.dto';
 import { TrainerWorkoutsQueryDto } from './dto/trainer-workouts-query.dto';
+import { CreateAdminWorkoutTemplateDto } from './dto/create-admin-workout-template.dto';
 import { CreateWorkoutTemplateDto } from './dto/create-workout-template.dto';
 import { CreateWorkoutDto } from './dto/create-workout.dto';
+import { UpdateAdminWorkoutTemplateDto } from './dto/update-admin-workout-template.dto';
 import { UpdateWorkoutItemResultDto } from './dto/update-workout-item-result.dto';
 import { UpdateWorkoutTemplateDto } from './dto/update-workout-template.dto';
 import { WorkoutTemplateItemDto } from './dto/workout-item.dto';
@@ -35,6 +40,7 @@ const workoutInclude = {
 
 const templateInclude = {
   items: { orderBy: { order: 'asc' } },
+  gym: { select: { name: true } },
 } satisfies Prisma.WorkoutTemplateInclude;
 
 type WorkoutEntity = Prisma.WorkoutGetPayload<{ include: typeof workoutInclude }>;
@@ -67,11 +73,19 @@ export interface WorkoutResponse {
   items: WorkoutItemResponse[];
 }
 
+export type WorkoutTemplateScope = 'GLOBAL' | 'GYM' | 'PERSONAL';
+
 export interface WorkoutTemplateResponse {
   id: string;
-  trainerId: string;
+  trainerId: string | null;
+  gymId: string | null;
+  gymName: string | null;
+  createdById: string | null;
+  scope: WorkoutTemplateScope;
   name: string;
   description: string | null;
+  isActive: boolean;
+  archivedAt: Date | null;
   items: unknown[];
 }
 
@@ -96,9 +110,10 @@ export class WorkoutsService {
 
   async findTemplates(userId: string): Promise<WorkoutTemplateResponse[]> {
     const trainer = await this.getTrainer(userId);
+    const gymIds = await this.activeGymIds(trainer.id);
 
     const templates = await this.prisma.workoutTemplate.findMany({
-      where: { trainerId: trainer.id },
+      where: this.trainerTemplateWhere(trainer.id, gymIds),
       include: templateInclude,
       orderBy: { createdAt: 'asc' },
     });
@@ -111,9 +126,10 @@ export class WorkoutsService {
     id: string,
   ): Promise<WorkoutTemplateResponse> {
     const trainer = await this.getTrainer(userId);
+    const gymIds = await this.activeGymIds(trainer.id);
 
     return this.toTemplateResponse(
-      await this.findTemplateEntity(trainer.id, id),
+      await this.findAccessibleTemplateEntity(trainer.id, gymIds, id),
     );
   }
 
@@ -127,6 +143,7 @@ export class WorkoutsService {
     const template = await this.prisma.workoutTemplate.create({
       data: {
         trainerId: trainer.id,
+        createdById: userId,
         name: dto.name,
         description: dto.description,
         items: { create: dto.items.map((item) => itemData(item)) },
@@ -143,7 +160,7 @@ export class WorkoutsService {
     dto: UpdateWorkoutTemplateDto,
   ): Promise<WorkoutTemplateResponse> {
     const trainer = await this.getTrainer(userId);
-    await this.findTemplateEntity(trainer.id, id);
+    await this.findOwnTemplateEntity(trainer.id, id);
 
     if (dto.items) {
       await this.assertItems(dto.items, undefined, trainer.id);
@@ -163,20 +180,173 @@ export class WorkoutsService {
       }
     });
 
-    return this.findOneTemplateResponse(trainer.id, id);
+    return this.findOneTemplateResponse(id);
   }
 
   async removeTemplate(userId: string, id: string): Promise<void> {
     const trainer = await this.getTrainer(userId);
-    await this.findTemplateEntity(trainer.id, id);
+    await this.findOwnTemplateEntity(trainer.id, id);
+
+    await this.prisma.workoutTemplate.update({
+      where: { id },
+      data: { isActive: false, archivedAt: new Date() },
+    });
+  }
+
+  async findAdminTemplates(): Promise<WorkoutTemplateResponse[]> {
+    const templates = await this.prisma.workoutTemplate.findMany({
+      where: { isActive: true },
+      include: templateInclude,
+      orderBy: [{ gymId: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return templates.map((template) => this.toTemplateResponse(template));
+  }
+
+  async createAdminTemplate(
+    userId: string,
+    dto: CreateAdminWorkoutTemplateDto,
+  ): Promise<WorkoutTemplateResponse> {
+    if (dto.gym_id) {
+      await this.assertGym(dto.gym_id);
+    }
+    await this.assertItems(dto.items, dto.gym_id ?? undefined);
+
+    const template = await this.prisma.workoutTemplate.create({
+      data: {
+        gymId: dto.gym_id ?? null,
+        createdById: userId,
+        name: dto.name,
+        description: dto.description,
+        items: { create: dto.items.map((item) => itemData(item)) },
+      },
+      include: templateInclude,
+    });
+
+    return this.toTemplateResponse(template);
+  }
+
+  async updateAdminTemplate(
+    userId: string,
+    id: string,
+    dto: UpdateAdminWorkoutTemplateDto,
+  ): Promise<WorkoutTemplateResponse> {
+    const template = await this.findActiveTemplateEntity(id);
+
+    if (dto.gym_id) {
+      await this.assertGym(dto.gym_id);
+    }
+    if (dto.items) {
+      await this.assertItems(
+        dto.items,
+        dto.gym_id ?? template.gymId ?? undefined,
+      );
+    }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.workout.updateMany({
-        where: { templateId: id },
-        data: { templateId: null },
+      await tx.workoutTemplate.update({
+        where: { id },
+        data: {
+          name: dto.name,
+          description: dto.description,
+          gymId: dto.gym_id === undefined ? undefined : dto.gym_id,
+        },
       });
-      await tx.workoutTemplateItem.deleteMany({ where: { templateId: id } });
-      await tx.workoutTemplate.delete({ where: { id } });
+
+      if (dto.items) {
+        await tx.workoutTemplateItem.deleteMany({ where: { templateId: id } });
+        await tx.workoutTemplateItem.createMany({
+          data: dto.items.map((item) => ({ ...itemData(item), templateId: id })),
+        });
+      }
+    });
+
+    return this.findOneTemplateResponse(id);
+  }
+
+  async removeAdminTemplate(id: string): Promise<void> {
+    await this.findActiveTemplateEntity(id);
+
+    await this.prisma.workoutTemplate.update({
+      where: { id },
+      data: { isActive: false, archivedAt: new Date() },
+    });
+  }
+
+  async findReceptionTemplates(
+    userId: string,
+  ): Promise<WorkoutTemplateResponse[]> {
+    const reception = await this.getReception(userId);
+    const templates = await this.prisma.workoutTemplate.findMany({
+      where: {
+        trainerId: null,
+        gymId: reception.gymId,
+        isActive: true,
+      },
+      include: templateInclude,
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return templates.map((template) => this.toTemplateResponse(template));
+  }
+
+  async createReceptionTemplate(
+    userId: string,
+    dto: CreateWorkoutTemplateDto,
+  ): Promise<WorkoutTemplateResponse> {
+    const reception = await this.getReception(userId);
+    await this.assertItems(dto.items, reception.gymId);
+
+    const template = await this.prisma.workoutTemplate.create({
+      data: {
+        gymId: reception.gymId,
+        createdById: userId,
+        name: dto.name,
+        description: dto.description,
+        items: { create: dto.items.map((item) => itemData(item)) },
+      },
+      include: templateInclude,
+    });
+
+    return this.toTemplateResponse(template);
+  }
+
+  async updateReceptionTemplate(
+    userId: string,
+    id: string,
+    dto: UpdateWorkoutTemplateDto,
+  ): Promise<WorkoutTemplateResponse> {
+    const reception = await this.getReception(userId);
+    await this.findReceptionTemplateEntity(reception.gymId, id);
+
+    if (dto.items) {
+      await this.assertItems(dto.items, reception.gymId);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.workoutTemplate.update({
+        where: { id },
+        data: { name: dto.name, description: dto.description },
+      });
+
+      if (dto.items) {
+        await tx.workoutTemplateItem.deleteMany({ where: { templateId: id } });
+        await tx.workoutTemplateItem.createMany({
+          data: dto.items.map((item) => ({ ...itemData(item), templateId: id })),
+        });
+      }
+    });
+
+    return this.findOneTemplateResponse(id);
+  }
+
+  async removeReceptionTemplate(userId: string, id: string): Promise<void> {
+    const reception = await this.getReception(userId);
+    await this.findReceptionTemplateEntity(reception.gymId, id);
+
+    await this.prisma.workoutTemplate.update({
+      where: { id },
+      data: { isActive: false, archivedAt: new Date() },
     });
   }
 
@@ -190,7 +360,7 @@ export class WorkoutsService {
     await this.assertItems(dto.items, dto.gym_id);
 
     if (dto.template_id) {
-      await this.assertTemplateOwned(trainer.id, dto.template_id);
+      await this.assertTemplateAccessible(trainer.id, dto.template_id);
     }
 
     const workout = await this.prisma.workout.create({
@@ -230,12 +400,9 @@ export class WorkoutsService {
       throw new NotFoundException('Workout not found');
     }
 
-    if (
-      workout.status === WorkoutStatus.DONE ||
-      workout.status === WorkoutStatus.SKIPPED
-    ) {
+    if (workout.status !== WorkoutStatus.PLANNED) {
       throw new ConflictException(
-        'Результаты завершённой тренировки изменять нельзя',
+        'План тренировки можно изменять только до её начала',
       );
     }
 
@@ -244,7 +411,7 @@ export class WorkoutsService {
     await this.assertItems(dto.items, dto.gym_id);
 
     if (dto.template_id) {
-      await this.assertTemplateOwned(trainer.id, dto.template_id);
+      await this.assertTemplateAccessible(trainer.id, dto.template_id);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -273,7 +440,7 @@ export class WorkoutsService {
   async trainerWorkouts(
     userId: string,
     query: TrainerWorkoutsQueryDto,
-  ): Promise<WorkoutResponse[]> {
+  ): Promise<PaginatedResponse<WorkoutResponse>> {
     const trainer = await this.getTrainer(userId);
     const where: Prisma.WorkoutWhereInput = { trainerId: trainer.id };
 
@@ -290,13 +457,23 @@ export class WorkoutsService {
       };
     }
 
-    const workouts = await this.prisma.workout.findMany({
-      where,
-      include: workoutInclude,
-      orderBy: { date: 'desc' },
-    });
+    const [workouts, total] = await this.prisma.$transaction([
+      this.prisma.workout.findMany({
+        where,
+        include: workoutInclude,
+        orderBy: { date: 'desc' },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.workout.count({ where }),
+    ]);
 
-    return workouts.map((workout) => this.toWorkoutResponse(workout));
+    return {
+      items: workouts.map((workout) => this.toWorkoutResponse(workout)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
   }
 
   async trainerWorkout(userId: string, id: string): Promise<WorkoutResponse> {
@@ -316,7 +493,7 @@ export class WorkoutsService {
   async clientWorkouts(
     userId: string,
     query: ClientWorkoutsQueryDto,
-  ): Promise<WorkoutResponse[]> {
+  ): Promise<PaginatedResponse<WorkoutResponse>> {
     const client = await this.getClient(userId);
     const from = parseDate(query.from);
     const to = parseDate(query.to);
@@ -325,17 +502,29 @@ export class WorkoutsService {
       throw new BadRequestException('from must be less than or equal to to');
     }
 
-    const workouts = await this.prisma.workout.findMany({
-      where: {
-        clientId: client.id,
-        date: { gte: from, lte: to },
-        ...(query.gym_id ? { gymId: query.gym_id } : {}),
-      },
-      include: workoutInclude,
-      orderBy: { date: 'asc' },
-    });
+    const where: Prisma.WorkoutWhereInput = {
+      clientId: client.id,
+      date: { gte: from, lte: to },
+      ...(query.gym_id ? { gymId: query.gym_id } : {}),
+    };
 
-    return workouts.map((workout) => this.toWorkoutResponse(workout));
+    const [workouts, total] = await this.prisma.$transaction([
+      this.prisma.workout.findMany({
+        where,
+        include: workoutInclude,
+        orderBy: { date: 'asc' },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.workout.count({ where }),
+    ]);
+
+    return {
+      items: workouts.map((workout) => this.toWorkoutResponse(workout)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
   }
 
   async clientWorkout(userId: string, id: string): Promise<WorkoutResponse> {
@@ -639,9 +828,75 @@ export class WorkoutsService {
     return client;
   }
 
-  private async findTemplateEntity(trainerId: string, id: string) {
+  private async getReception(userId: string) {
+    const reception = await this.prisma.reception.findUnique({
+      where: { userId },
+      select: { gymId: true },
+    });
+
+    if (!reception) {
+      throw new ForbiddenException('Reception profile not found');
+    }
+
+    return reception;
+  }
+
+  private async activeGymIds(trainerId: string): Promise<string[]> {
+    const links = await this.prisma.trainerGym.findMany({
+      where: { trainerId, isActive: true },
+      select: { gymId: true },
+    });
+
+    return links.map((link) => link.gymId);
+  }
+
+  private trainerTemplateWhere(
+    trainerId: string,
+    gymIds: string[],
+  ): Prisma.WorkoutTemplateWhereInput {
+    return {
+      isActive: true,
+      OR: [
+        { trainerId },
+        { trainerId: null, gymId: null },
+        { trainerId: null, gymId: { in: gymIds } },
+      ],
+    };
+  }
+
+  private async findAccessibleTemplateEntity(
+    trainerId: string,
+    gymIds: string[],
+    id: string,
+  ) {
+    return this.findTemplateOrThrow({
+      ...this.trainerTemplateWhere(trainerId, gymIds),
+      id,
+    });
+  }
+
+  private async findOwnTemplateEntity(trainerId: string, id: string) {
+    return this.findTemplateOrThrow({ id, trainerId, isActive: true });
+  }
+
+  private async findActiveTemplateEntity(id: string) {
+    return this.findTemplateOrThrow({ id, isActive: true });
+  }
+
+  private async findReceptionTemplateEntity(gymId: string, id: string) {
+    return this.findTemplateOrThrow({
+      id,
+      gymId,
+      trainerId: null,
+      isActive: true,
+    });
+  }
+
+  private async findTemplateOrThrow(
+    where: Prisma.WorkoutTemplateWhereInput,
+  ) {
     const template = await this.prisma.workoutTemplate.findFirst({
-      where: { id, trainerId },
+      where,
       include: templateInclude,
     });
 
@@ -690,12 +945,16 @@ export class WorkoutsService {
     }
   }
 
-  private async assertTemplateOwned(
+  private async assertTemplateAccessible(
     trainerId: string,
     templateId: string,
   ): Promise<void> {
+    const gymIds = await this.activeGymIds(trainerId);
     const template = await this.prisma.workoutTemplate.findFirst({
-      where: { id: templateId, trainerId },
+      where: {
+        ...this.trainerTemplateWhere(trainerId, gymIds),
+        id: templateId,
+      },
     });
 
     if (!template) {
@@ -710,7 +969,7 @@ export class WorkoutsService {
   ): Promise<void> {
     const exerciseIds = [...new Set(items.map((item) => item.exerciseId))];
     const exercisesCount = await this.prisma.exercise.count({
-      where: { id: { in: exerciseIds } },
+      where: { id: { in: exerciseIds }, isActive: true },
     });
 
     if (exercisesCount !== exerciseIds.length) {
@@ -755,19 +1014,9 @@ export class WorkoutsService {
   }
 
   private async findOneTemplateResponse(
-    trainerId: string,
     id: string,
   ): Promise<WorkoutTemplateResponse> {
-    const template = await this.prisma.workoutTemplate.findFirst({
-      where: { id, trainerId },
-      include: templateInclude,
-    });
-
-    if (!template) {
-      throw new NotFoundException('Workout template not found');
-    }
-
-    return this.toTemplateResponse(template);
+    return this.toTemplateResponse(await this.findActiveTemplateEntity(id));
   }
 
   private async findOneWorkoutResponse(id: string): Promise<WorkoutResponse> {
@@ -789,8 +1038,18 @@ export class WorkoutsService {
     return {
       id: template.id,
       trainerId: template.trainerId,
+      gymId: template.gymId,
+      gymName: template.gym?.name ?? null,
+      createdById: template.createdById,
+      scope: template.trainerId
+        ? 'PERSONAL'
+        : template.gymId
+          ? 'GYM'
+          : 'GLOBAL',
       name: template.name,
       description: template.description,
+      isActive: template.isActive,
+      archivedAt: template.archivedAt,
       items: template.items,
     };
   }

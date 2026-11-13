@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { ResetPasswordDto } from '../auth/dto/reset-password.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateReceptionDto } from './dto/create-reception.dto';
 import { UpdateReceptionDto } from './dto/update-reception.dto';
@@ -47,6 +48,16 @@ export class ReceptionsController {
     @Body() dto: UpdateReceptionDto,
   ): Promise<ReceptionResponse> {
     return this.receptionsService.update(id, dto);
+  }
+
+  @Post(':id/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Сбросить пароль ресепшена' })
+  resetPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ new_password: string }> {
+    return this.receptionsService.resetPassword(id, dto.password);
   }
 
   @Delete(':id')

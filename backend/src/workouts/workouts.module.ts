@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import {
+  AdminTemplatesController,
   ClientWorkoutItemsController,
   ClientWorkoutsController,
+  ReceptionTemplatesController,
   TrainerTemplatesController,
   TrainerWorkoutItemsController,
   TrainerWorkoutsController,
@@ -10,6 +12,8 @@ import { WorkoutsService } from './workouts.service';
 
 @Module({
   controllers: [
+    AdminTemplatesController,
+    ReceptionTemplatesController,
     TrainerTemplatesController,
     TrainerWorkoutsController,
     ClientWorkoutsController,

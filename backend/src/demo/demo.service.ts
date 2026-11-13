@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
+import { ensureDefaultConfiguration } from '../default-config/default-config';
 import { PrismaService } from '../prisma/prisma.service';
 
 const DEMO_PHONE_PREFIX = '+7999555';
@@ -78,6 +79,9 @@ export interface DemoLoadResult extends DemoStatus {
   equipment: number;
   exercises: number;
   templates: number;
+  defaultEquipment: number;
+  defaultExercises: number;
+  defaultTemplates: number;
   measurements: number;
   nutrition: number;
 }
@@ -506,6 +510,8 @@ export class DemoService {
     const exercises = await this.ensureExercises();
     const exercisesById = new Map(exercises.map((item) => [item.id, item]));
 
+    const defaults = await ensureDefaultConfiguration(this.prisma, null);
+
     const trainerUserIds = DEMO_TRAINERS.map(
       (_, index) =>
         `${DEMO_PHONE_PREFIX}00${String(index + 1).padStart(2, '0')}`,
@@ -929,6 +935,9 @@ export class DemoService {
       equipment: equipmentRows.length,
       exercises: exercises.length,
       templates: templateRows.length,
+      defaultEquipment: defaults.equipment,
+      defaultExercises: defaults.exercises,
+      defaultTemplates: defaults.templates,
       measurements: measurementRows.length,
       nutrition: nutritionRows.length,
     };

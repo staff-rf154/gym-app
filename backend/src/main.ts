@@ -19,6 +19,7 @@ function getCorsOrigins(): string[] {
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
+  app.enableShutdownHooks();
   app.setGlobalPrefix('api/v1');
   app.use(helmet());
   app.enableCors({
@@ -33,7 +34,7 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.ENABLE_SWAGGER !== 'false') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Gym MVP API')
       .setDescription('API спортивного зала')

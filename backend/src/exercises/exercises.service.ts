@@ -1,33 +1,44 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Exercise } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_TTL, RedisService } from '../redis/redis.service';
 import { CreateExerciseDto } from './dto/create-exercise.dto';
 import { ExerciseFilterDto } from './dto/exercise-filter.dto';
 import { UpdateExerciseDto } from './dto/update-exercise.dto';
 
 @Injectable()
 export class ExercisesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   findAll(filter: ExerciseFilterDto = {}): Promise<Exercise[]> {
-    return this.prisma.exercise.findMany({
-      where: {
-        type: filter.type,
-        muscleGroup: filter.muscle_group,
-        name: filter.q
-          ? { contains: filter.q, mode: 'insensitive' }
-          : undefined,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    const key = `cache:exercises:list:${JSON.stringify({
+      type: filter.type ?? null,
+      muscleGroup: filter.muscle_group ?? null,
+      q: filter.q ?? null,
+    })}`;
+
+    return this.redis.getOrSet(key, CACHE_TTL.reference, () =>
+      this.prisma.exercise.findMany({
+        where: {
+          isActive: true,
+          type: filter.type,
+          muscleGroup: filter.muscle_group,
+          name: filter.q
+            ? { contains: filter.q, mode: 'insensitive' }
+            : undefined,
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
   }
 
   async findOne(id: string): Promise<Exercise> {
-    const exercise = await this.prisma.exercise.findUnique({ where: { id } });
+    const exercise = await this.prisma.exercise.findFirst({
+      where: { id, isActive: true },
+    });
 
     if (!exercise) {
       throw new NotFoundException('Exercise not found');
@@ -49,17 +60,9 @@ export class ExercisesService {
   async remove(id: string): Promise<void> {
     await this.findOne(id);
 
-    const [templateItemCount, workoutItemCount] = await Promise.all([
-      this.prisma.workoutTemplateItem.count({ where: { exerciseId: id } }),
-      this.prisma.workoutItem.count({ where: { exerciseId: id } }),
-    ]);
-
-    if (templateItemCount > 0 || workoutItemCount > 0) {
-      throw new ConflictException(
-        'Exercise is used in workouts and cannot be deleted',
-      );
-    }
-
-    await this.prisma.exercise.delete({ where: { id } });
+    await this.prisma.exercise.update({
+      where: { id },
+      data: { isActive: false, archivedAt: new Date() },
+    });
   }
 }

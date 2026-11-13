@@ -1,11 +1,17 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { ChatType, Message, Prisma, Role } from '@prisma/client';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatEvents } from './chat-events.service';
+import { CreateChatDto } from './dto/create-chat.dto';
 import { MessagesQueryDto, SendMessageDto } from './dto/message.dto';
 
 const chatInclude = {
@@ -35,11 +41,49 @@ export class ChatsService {
     private readonly chatEvents: ChatEvents,
   ) {}
 
-  async findChats(userId: string, role: Role): Promise<ChatResponse[]> {
+  async findChats(
+    userId: string,
+    role: Role,
+    query: PaginationQueryDto = new PaginationQueryDto(),
+  ): Promise<PaginatedResponse<ChatResponse>> {
     const where = await this.buildParticipantWhere(userId, role);
 
-    const chats = await this.prisma.chat.findMany({
-      where,
+    const [chats, total] = await this.prisma.$transaction([
+      this.prisma.chat.findMany({
+        where,
+        include: {
+          ...chatInclude,
+          _count: {
+            select: {
+              messages: {
+                where: { readAt: null, senderId: { not: userId } },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.chat.count({ where }),
+    ]);
+
+    return {
+      items: chats.map((chat) => this.toResponse(chat, role)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
+  }
+
+  async createChat(
+    userId: string,
+    role: Role,
+    dto: CreateChatDto,
+  ): Promise<ChatResponse> {
+    const participants = await this.resolveChatParticipants(userId, role, dto);
+    const existing = await this.prisma.chat.findFirst({
+      where: participants,
       include: {
         ...chatInclude,
         _count: {
@@ -50,10 +94,27 @@ export class ChatsService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
     });
 
-    return chats.map((chat) => this.toResponse(chat, role));
+    if (existing) {
+      return this.toResponse(existing, role);
+    }
+
+    const chat = await this.prisma.chat.create({
+      data: participants,
+      include: {
+        ...chatInclude,
+        _count: {
+          select: {
+            messages: {
+              where: { readAt: null, senderId: { not: userId } },
+            },
+          },
+        },
+      },
+    });
+
+    return this.toResponse(chat, role);
   }
 
   async findMessages(
@@ -159,6 +220,127 @@ export class ChatsService {
         'Chat is read-only because the client-trainer link is inactive',
       );
     }
+  }
+
+  private async resolveChatParticipants(
+    userId: string,
+    role: Role,
+    dto: CreateChatDto,
+  ): Promise<{
+    type: ChatType;
+    clientId: string | null;
+    trainerId: string | null;
+    adminId: string | null;
+  }> {
+    let clientId = dto.client_id ?? null;
+    let trainerId = dto.trainer_id ?? null;
+    let adminId = dto.admin_id ?? null;
+
+    if (role === Role.CLIENT) {
+      const client = await this.prisma.client.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+
+      if (!client) {
+        throw new ForbiddenException('Client profile not found');
+      }
+
+      clientId = client.id;
+
+      if (dto.type === ChatType.CLIENT_TRAINER) {
+        if (!trainerId) {
+          throw new BadRequestException('trainer_id is required');
+        }
+        await this.assertActiveClientTrainer(clientId, trainerId);
+        adminId = null;
+      } else if (dto.type === ChatType.CLIENT_ADMIN) {
+        adminId = adminId ?? (await this.pickAdminId());
+        trainerId = null;
+      } else {
+        throw new ForbiddenException('Client cannot create this chat type');
+      }
+    } else if (role === Role.TRAINER) {
+      const trainer = await this.prisma.trainer.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+
+      if (!trainer) {
+        throw new ForbiddenException('Trainer profile not found');
+      }
+
+      trainerId = trainer.id;
+
+      if (dto.type === ChatType.CLIENT_TRAINER) {
+        if (!clientId) {
+          throw new BadRequestException('client_id is required');
+        }
+        await this.assertActiveClientTrainer(clientId, trainerId);
+        adminId = null;
+      } else if (dto.type === ChatType.TRAINER_ADMIN) {
+        adminId = adminId ?? (await this.pickAdminId());
+        clientId = null;
+      } else {
+        throw new ForbiddenException('Trainer cannot create this chat type');
+      }
+    } else if (role === Role.ADMIN) {
+      adminId = userId;
+
+      if (dto.type === ChatType.CLIENT_ADMIN) {
+        if (!clientId) {
+          throw new BadRequestException('client_id is required');
+        }
+        trainerId = null;
+      } else if (dto.type === ChatType.TRAINER_ADMIN) {
+        if (!trainerId) {
+          throw new BadRequestException('trainer_id is required');
+        }
+        clientId = null;
+      } else if (dto.type === ChatType.CLIENT_TRAINER) {
+        if (!clientId || !trainerId) {
+          throw new BadRequestException(
+            'client_id and trainer_id are required',
+          );
+        }
+        await this.assertActiveClientTrainer(clientId, trainerId);
+        adminId = null;
+      }
+    } else {
+      throw new ForbiddenException('Role cannot create chats');
+    }
+
+    return { type: dto.type, clientId, trainerId, adminId };
+  }
+
+  private async assertActiveClientTrainer(
+    clientId: string,
+    trainerId: string,
+  ): Promise<void> {
+    const link = await this.prisma.clientTrainer.findFirst({
+      where: { clientId, trainerId, isActive: true },
+      select: { id: true },
+    });
+
+    if (!link) {
+      throw new ForbiddenException(
+        'Client-trainer link is not active',
+      );
+    }
+  }
+
+  private async pickAdminId(): Promise<string> {
+    const admin = await this.prisma.user.findFirst({
+      where: { role: Role.ADMIN },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!admin) {
+      throw new NotFoundException('Admin not found');
+    }
+
+    return admin.id;
   }
 
   private async buildParticipantWhere(

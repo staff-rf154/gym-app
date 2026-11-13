@@ -6,15 +6,18 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTrainerDto } from './dto/create-trainer.dto';
 import { UpdateTrainerDto } from './dto/update-trainer.dto';
 
 const BCRYPT_ROUNDS = 12;
-const FALLBACK_PASSWORD = 'ChangeMe123!';
 
 const trainerInclude = {
-  user: true,
+  user: { select: { phone: true, name: true } },
   trainerGyms: {
     where: { isActive: true },
     include: { gym: true },
@@ -40,6 +43,8 @@ export interface TrainerResponse {
   phone: string;
   name: string;
   photoUrl: string | null;
+  isActive: boolean;
+  archivedAt: Date | null;
   gyms: TrainerGymResponse[];
 }
 
@@ -54,13 +59,34 @@ export class TrainersService {
     private readonly configService: ConfigService,
   ) {}
 
-  async findAll(): Promise<TrainerResponse[]> {
-    const trainers = await this.prisma.trainer.findMany({
-      include: trainerInclude,
-      orderBy: { createdAt: 'asc' },
-    });
+  async findAll(
+    gymId?: string,
+    query: PaginationQueryDto & { include_archived?: boolean } = new PaginationQueryDto(),
+  ): Promise<PaginatedResponse<TrainerResponse>> {
+    const where: Prisma.TrainerWhereInput = {
+      ...(gymId
+        ? { trainerGyms: { some: { gymId, isActive: true } } }
+        : {}),
+      ...(query.include_archived ? {} : { isActive: true }),
+    };
 
-    return trainers.map((trainer) => this.toResponse(trainer));
+    const [trainers, total] = await this.prisma.$transaction([
+      this.prisma.trainer.findMany({
+        where,
+        include: trainerInclude,
+        orderBy: { createdAt: 'asc' },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.trainer.count({ where }),
+    ]);
+
+    return {
+      items: trainers.map((trainer) => this.toResponse(trainer, gymId)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
   }
 
   async create(
@@ -140,48 +166,51 @@ export class TrainersService {
     return this.toResponse(updated);
   }
 
+  async resetPassword(
+    id: string,
+    password?: string,
+  ): Promise<{ new_password: string }> {
+    const trainer = await this.findEntity(id);
+    const newPassword = password ?? this.getInitialPassword();
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: trainer.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshToken.deleteMany({
+        where: { userId: trainer.userId },
+      }),
+    ]);
+
+    return { new_password: newPassword };
+  }
+
   async remove(id: string): Promise<void> {
     const trainer = await this.findEntity(id);
 
-    await this.prisma.$transaction(async (tx) => {
-      const chats = await tx.chat.findMany({
-        where: { trainerId: id },
-        select: { id: true },
-      });
-      await tx.message.deleteMany({
-        where: { chatId: { in: chats.map((chat) => chat.id) } },
-      });
-      await tx.chat.deleteMany({ where: { trainerId: id } });
-      await tx.workoutItemResult.deleteMany({
-        where: { item: { workout: { trainerId: id } } },
-      });
-      await tx.workoutItem.deleteMany({
-        where: { workout: { trainerId: id } },
-      });
-      await tx.workout.deleteMany({ where: { trainerId: id } });
-      await tx.workoutTemplateItem.deleteMany({
-        where: { template: { trainerId: id } },
-      });
-      await tx.workoutTemplate.deleteMany({ where: { trainerId: id } });
-      await tx.nutritionRecommendation.deleteMany({ where: { trainerId: id } });
-      await tx.weightMeasurement.deleteMany({
-        where: { measuredBy: trainer.userId },
-      });
-      await tx.notificationRecipient.deleteMany({
+    if (!trainer.isActive) {
+      return;
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.trainer.update({
+        where: { id },
+        data: { isActive: false, archivedAt: new Date() },
+      }),
+      this.prisma.clientTrainer.updateMany({
+        where: { trainerId: id, isActive: true },
+        data: { isActive: false },
+      }),
+      this.prisma.trainerGym.updateMany({
+        where: { trainerId: id, isActive: true },
+        data: { isActive: false },
+      }),
+      this.prisma.refreshToken.deleteMany({
         where: { userId: trainer.userId },
-      });
-      await tx.notificationRecipient.deleteMany({
-        where: { notification: { senderId: trainer.userId } },
-      });
-      await tx.notification.deleteMany({
-        where: { senderId: trainer.userId },
-      });
-      await tx.refreshToken.deleteMany({ where: { userId: trainer.userId } });
-      await tx.clientTrainer.deleteMany({ where: { trainerId: id } });
-      await tx.trainerGym.deleteMany({ where: { trainerId: id } });
-      await tx.trainer.delete({ where: { id } });
-      await tx.user.delete({ where: { id: trainer.userId } });
-    });
+      }),
+    ]);
   }
 
   private async findEntity(id: string): Promise<TrainerWithUser> {
@@ -197,14 +226,23 @@ export class TrainersService {
     return trainer;
   }
 
-  private toResponse(trainer: TrainerWithUser): TrainerResponse {
+  private toResponse(
+    trainer: TrainerWithUser,
+    gymId?: string,
+  ): TrainerResponse {
+    const trainerGyms = gymId
+      ? trainer.trainerGyms.filter((link) => link.gymId === gymId)
+      : trainer.trainerGyms;
+
     return {
       id: trainer.id,
       userId: trainer.userId,
       phone: trainer.user.phone,
       name: trainer.user.name,
       photoUrl: trainer.photoUrl,
-      gyms: trainer.trainerGyms.map((link) => ({
+      isActive: trainer.isActive,
+      archivedAt: trainer.archivedAt,
+      gyms: trainerGyms.map((link) => ({
         id: link.id,
         gymId: link.gymId,
         gymName: link.gym.name,
@@ -215,10 +253,7 @@ export class TrainersService {
   }
 
   private getInitialPassword(): string {
-    return (
-      this.configService.get<string>('DEFAULT_CLIENT_PASSWORD') ??
-      FALLBACK_PASSWORD
-    );
+    return this.configService.getOrThrow<string>('DEFAULT_CLIENT_PASSWORD');
   }
 
   private async ensurePhoneAvailable(phone: string): Promise<void> {

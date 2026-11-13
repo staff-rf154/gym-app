@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import GymsPage from './pages/Gyms';
 import EquipmentPage from './pages/Equipment';
 import ExercisesPage from './pages/Exercises';
+import TemplatesPage from './pages/Templates';
 import FoodProductsPage from './pages/FoodProducts';
 import ClientsPage from './pages/Clients';
 import ClientWeightPage from './pages/ClientWeight';
@@ -95,10 +96,12 @@ function ProtectedRoute() {
           await refreshAccessToken();
         }
 
-        const me = await api.get<AuthUser>('/auth/me');
+        if (!user) {
+          const me = await api.get<AuthUser>('/auth/me');
 
-        if (!cancelled) {
-          setUser(me.data);
+          if (!cancelled) {
+            setUser(me.data);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -246,6 +249,14 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: 'templates',
+            element: (
+              <RoleRoute roles={['ADMIN']}>
+                <TemplatesPage />
+              </RoleRoute>
+            ),
+          },
+          {
             path: 'products',
             element: (
               <RoleRoute roles={['ADMIN']}>
@@ -294,10 +305,26 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: 'reception/clients/:id/weight',
+            element: (
+              <RoleRoute roles={['ADMIN', 'RECEPTION']}>
+                <ClientWeightPage />
+              </RoleRoute>
+            ),
+          },
+          {
             path: 'reception/trainers',
             element: (
               <RoleRoute roles={['RECEPTION']}>
                 <ReceptionTrainersPage />
+              </RoleRoute>
+            ),
+          },
+          {
+            path: 'reception/templates',
+            element: (
+              <RoleRoute roles={['RECEPTION']}>
+                <TemplatesPage />
               </RoleRoute>
             ),
           },

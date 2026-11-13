@@ -20,10 +20,12 @@ import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import PhotoUpload from '../../components/PhotoUpload';
 import { GENDER_OPTIONS, type Gender } from '../../constants/options';
 import { formatDate } from '../../utils/format';
+import type { PaginatedResponse } from '../../types/pagination';
 
 interface ClientTrainerLink {
   id: string;
@@ -81,6 +83,7 @@ interface ClientFormValues {
 }
 
 export default function ReceptionClientsPage() {
+  const navigate = useNavigate();
   const [form] = Form.useForm<ClientFormValues>();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -96,16 +99,16 @@ export default function ReceptionClientsPage() {
   } = useQuery({
     queryKey: ['reception-clients'],
     queryFn: async () => {
-      const { data } = await api.get<Client[]>('/reception/clients');
-      return data;
+      const { data } = await api.get<PaginatedResponse<Client>>('/reception/clients', { params: { limit: 100 } });
+      return data.items;
     },
   });
 
   const { data: trainers = [] } = useQuery({
     queryKey: ['reception-trainers'],
     queryFn: async () => {
-      const { data } = await api.get<Trainer[]>('/reception/trainers');
-      return data;
+      const { data } = await api.get<PaginatedResponse<Trainer>>('/reception/trainers', { params: { limit: 100 } });
+      return data.items;
     },
   });
 
@@ -326,6 +329,16 @@ export default function ReceptionClientsPage() {
             }}
           >
             Тренеры
+          </Button>
+          <Button
+            type="link"
+            onClick={() =>
+              navigate(`/protected/reception/clients/${client.id}/weight`, {
+                state: { name: client.name },
+              })
+            }
+          >
+            Вес
           </Button>
           <Button type="link" onClick={() => openEditModal(client)}>
             Редактировать

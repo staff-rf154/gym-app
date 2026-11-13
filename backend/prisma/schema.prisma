@@ -62,15 +62,16 @@ model User {
   timezone     String   @default("Asia/Novosibirsk")
   createdAt    DateTime @default(now()) @db.Timestamptz
 
-  client                Client?
-  trainer               Trainer?
-  reception             Reception?
-  measurements          WeightMeasurement[]    @relation("Measurer")
-  sentMessages          Message[]
-  sentNotifications     Notification[]
-  notificationRecipients NotificationRecipient[]
-  refreshTokens         RefreshToken[]
-  adminChats            Chat[]
+  client                  Client?
+  trainer                 Trainer?
+  reception               Reception?
+  measurements            WeightMeasurement[]     @relation("Measurer")
+  sentMessages            Message[]
+  sentNotifications       Notification[]
+  notificationRecipients  NotificationRecipient[]
+  refreshTokens           RefreshToken[]
+  adminChats              Chat[]
+  createdWorkoutTemplates WorkoutTemplate[]       @relation("WorkoutTemplateCreator")
 }
 
 model Gym {
@@ -80,13 +81,14 @@ model Gym {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz
 
-  equipment      GymEquipment[]
-  clientTrainers ClientTrainer[]
-  trainerGyms    TrainerGym[]
-  clientGyms     ClientGym[]
-  workouts       Workout[]
-  notifications  Notification[]
-  receptions     Reception[]
+  equipment        GymEquipment[]
+  clientTrainers   ClientTrainer[]
+  trainerGyms      TrainerGym[]
+  clientGyms       ClientGym[]
+  workouts         Workout[]
+  notifications    Notification[]
+  receptions       Reception[]
+  workoutTemplates WorkoutTemplate[]
 }
 
 model GymEquipment {
@@ -100,23 +102,27 @@ model GymEquipment {
   description String?
   createdAt   DateTime         @default(now()) @db.Timestamptz
 
-  gym           Gym                 @relation(fields: [gymId], references: [id])
+  gym           Gym                   @relation(fields: [gymId], references: [id])
   templateItems WorkoutTemplateItem[]
   workoutItems  WorkoutItem[]
 }
 
 model Exercise {
-  id                 String       @id @default(uuid()) @db.Uuid
-  name               String
-  type               ExerciseType
-  muscleGroup        String?
-  requiresEquipment  Boolean      @default(false)
-  videoUrl           String?
-  description        String?
-  createdAt          DateTime     @default(now()) @db.Timestamptz
+  id                String       @id @default(uuid()) @db.Uuid
+  name              String
+  type              ExerciseType
+  muscleGroup       String?
+  requiresEquipment Boolean      @default(false)
+  videoUrl          String?
+  description       String?
+  isActive          Boolean      @default(true)
+  archivedAt        DateTime?    @db.Timestamptz
+  createdAt         DateTime     @default(now()) @db.Timestamptz
 
   templateItems WorkoutTemplateItem[]
   workoutItems  WorkoutItem[]
+
+  @@index([isActive])
 }
 
 model FoodProduct {
@@ -144,44 +150,48 @@ model Goal {
 }
 
 model Client {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @unique @db.Uuid
-  photoUrl    String?
-  gender      Gender?
-  height      Float?
-  birthdate   DateTime? @db.Date
-  startWeight Float?
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @unique @db.Uuid
+  photoUrl     String?
+  gender       Gender?
+  height       Float?
+  birthdate    DateTime? @db.Date
+  startWeight  Float?
   startFatMass Float?
-  goal        String?
-  goalId      String?  @db.Uuid
-  notes       String?
-  createdAt   DateTime @default(now()) @db.Timestamptz
+  goal         String?
+  goalId       String?   @db.Uuid
+  notes        String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz
 
-  user                   User                    @relation(fields: [userId], references: [id])
-  goalRef                Goal?                   @relation(fields: [goalId], references: [id])
-  weightMeasurements     WeightMeasurement[]
-  clientTrainers         ClientTrainer[]
-  clientGyms             ClientGym[]
-  workouts               Workout[]
+  user                     User                      @relation(fields: [userId], references: [id])
+  goalRef                  Goal?                     @relation(fields: [goalId], references: [id])
+  weightMeasurements       WeightMeasurement[]
+  clientTrainers           ClientTrainer[]
+  clientGyms               ClientGym[]
+  workouts                 Workout[]
   nutritionRecommendations NutritionRecommendation[]
-  chats                  Chat[]
+  chats                    Chat[]
 
   @@index([goalId])
 }
 
 model Trainer {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @unique @db.Uuid
-  photoUrl  String?
-  createdAt DateTime @default(now()) @db.Timestamptz
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @unique @db.Uuid
+  photoUrl   String?
+  isActive   Boolean   @default(true)
+  archivedAt DateTime? @db.Timestamptz
+  createdAt  DateTime  @default(now()) @db.Timestamptz
 
-  user                   User                    @relation(fields: [userId], references: [id])
-  clientTrainers         ClientTrainer[]
-  trainerGyms            TrainerGym[]
-  workoutTemplates       WorkoutTemplate[]
-  workouts               Workout[]
+  user                     User                      @relation(fields: [userId], references: [id])
+  clientTrainers           ClientTrainer[]
+  trainerGyms              TrainerGym[]
+  workoutTemplates         WorkoutTemplate[]
+  workouts                 Workout[]
   nutritionRecommendations NutritionRecommendation[]
-  chats                  Chat[]
+  chats                    Chat[]
+
+  @@index([isActive])
 }
 
 model ClientTrainer {
@@ -261,15 +271,26 @@ model WeightMeasurement {
 }
 
 model WorkoutTemplate {
-  id          String   @id @default(uuid()) @db.Uuid
-  trainerId   String   @db.Uuid
+  id          String    @id @default(uuid()) @db.Uuid
+  trainerId   String?   @db.Uuid
+  gymId       String?   @db.Uuid
+  createdById String?   @db.Uuid
   name        String
   description String?
-  createdAt   DateTime @default(now()) @db.Timestamptz
+  defaultKey  String?   @unique
+  isActive    Boolean   @default(true)
+  archivedAt  DateTime? @db.Timestamptz
+  createdAt   DateTime  @default(now()) @db.Timestamptz
 
-  trainer Trainer               @relation(fields: [trainerId], references: [id])
-  items   WorkoutTemplateItem[]
-  workouts Workout[]
+  trainer   Trainer?              @relation(fields: [trainerId], references: [id])
+  gym       Gym?                  @relation(fields: [gymId], references: [id])
+  createdBy User?                 @relation("WorkoutTemplateCreator", fields: [createdById], references: [id])
+  items     WorkoutTemplateItem[]
+  workouts  Workout[]
+
+  @@index([trainerId])
+  @@index([gymId, isActive])
+  @@index([isActive])
 }
 
 model WorkoutTemplateItem {
@@ -283,9 +304,11 @@ model WorkoutTemplateItem {
   restSec       Int?
   order         Int
 
-  template WorkoutTemplate @relation(fields: [templateId], references: [id])
-  exercise Exercise        @relation(fields: [exerciseId], references: [id])
-  equipment GymEquipment?  @relation(fields: [equipmentId], references: [id])
+  template  WorkoutTemplate @relation(fields: [templateId], references: [id])
+  exercise  Exercise        @relation(fields: [exerciseId], references: [id])
+  equipment GymEquipment?   @relation(fields: [equipmentId], references: [id])
+
+  @@index([templateId])
 }
 
 model Workout {
@@ -307,6 +330,8 @@ model Workout {
 
   @@index([clientId, date])
   @@index([trainerId, date])
+  @@index([gymId, date])
+  @@index([status])
 }
 
 model WorkoutItem {
@@ -323,6 +348,10 @@ model WorkoutItem {
   exercise  Exercise           @relation(fields: [exerciseId], references: [id])
   equipment GymEquipment?      @relation(fields: [equipmentId], references: [id])
   result    WorkoutItemResult?
+
+  @@index([workoutId])
+  @@index([exerciseId])
+  @@index([equipmentId])
 }
 
 model WorkoutItemResult {
@@ -353,6 +382,9 @@ model NutritionRecommendation {
 
   client  Client  @relation(fields: [clientId], references: [id])
   trainer Trainer @relation(fields: [trainerId], references: [id])
+
+  @@index([clientId, createdAt])
+  @@index([trainerId, createdAt])
 }
 
 model Chat {
@@ -363,10 +395,14 @@ model Chat {
   adminId   String?  @db.Uuid
   createdAt DateTime @default(now()) @db.Timestamptz
 
-  client  Client?  @relation(fields: [clientId], references: [id])
-  trainer Trainer? @relation(fields: [trainerId], references: [id])
-  admin   User?    @relation(fields: [adminId], references: [id])
+  client   Client?   @relation(fields: [clientId], references: [id])
+  trainer  Trainer?  @relation(fields: [trainerId], references: [id])
+  admin    User?     @relation(fields: [adminId], references: [id])
   messages Message[]
+
+  @@index([clientId, createdAt])
+  @@index([trainerId, createdAt])
+  @@index([adminId, createdAt])
 }
 
 model Message {
@@ -392,9 +428,12 @@ model Notification {
   senderId  String   @db.Uuid
   createdAt DateTime @default(now()) @db.Timestamptz
 
-  gym        Gym?                   @relation(fields: [gymId], references: [id])
-  sender     User                   @relation(fields: [senderId], references: [id])
+  gym        Gym?                    @relation(fields: [gymId], references: [id])
+  sender     User                    @relation(fields: [senderId], references: [id])
   recipients NotificationRecipient[]
+
+  @@index([gymId, createdAt])
+  @@index([senderId])
 }
 
 model NotificationRecipient {
@@ -417,4 +456,6 @@ model RefreshToken {
   expiresAt DateTime @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }

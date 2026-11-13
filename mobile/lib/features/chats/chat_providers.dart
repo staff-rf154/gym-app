@@ -8,6 +8,6 @@ final chatApiProvider = Provider<ChatApi>(
   (ref) => ChatApi(ref.watch(apiClientProvider)),
 );
 
-final chatsProvider = FutureProvider<List<ChatSummary>>(
+final chatsProvider = FutureProvider.autoDispose<List<ChatSummary>>(
   (ref) => ref.watch(chatApiProvider).fetchChats(),
 );

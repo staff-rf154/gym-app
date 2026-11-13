@@ -32,6 +32,9 @@ interface DemoLoadResult extends DemoStatus {
   equipment: number;
   exercises: number;
   templates: number;
+  defaultEquipment: number;
+  defaultExercises: number;
+  defaultTemplates: number;
   measurements: number;
   nutrition: number;
 }
@@ -60,7 +63,7 @@ export default function SettingsPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries();
       message.success(
-        `Демо-данные загружены: ${data.clients} клиентов, ${data.workouts} тренировок`,
+        `Демо-данные загружены: ${data.clients} клиентов, ${data.workouts} тренировок, ${data.defaultTemplates} общих шаблонов`,
       );
     },
     onError: (error: unknown) => {

@@ -1,17 +1,26 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { FoodProduct } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_TTL, RedisService } from '../redis/redis.service';
 import { CreateFoodProductDto } from './dto/create-food-product.dto';
 import { UpdateFoodProductDto } from './dto/update-food-product.dto';
 
 @Injectable()
 export class FoodProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   findAll(): Promise<FoodProduct[]> {
-    return this.prisma.foodProduct.findMany({
-      orderBy: { createdAt: 'asc' },
-    });
+    return this.redis.getOrSet(
+      'cache:food-products:all',
+      CACHE_TTL.reference,
+      () =>
+        this.prisma.foodProduct.findMany({
+          orderBy: { createdAt: 'asc' },
+        }),
+    );
   }
 
   async findOne(id: string): Promise<FoodProduct> {

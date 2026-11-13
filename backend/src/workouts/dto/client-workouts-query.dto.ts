@@ -1,7 +1,8 @@
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsUUID, Matches } from 'class-validator';
 
-export class ClientWorkoutsQueryDto {
+export class ClientWorkoutsQueryDto extends PaginationQueryDto {
   @ApiProperty({ example: '2026-11-01', format: 'date' })
   @Matches(/^\d{4}-\d{2}-\d{2}$/, {
     message: 'from must be in YYYY-MM-DD format',

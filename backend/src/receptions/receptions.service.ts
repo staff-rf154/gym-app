@@ -11,10 +11,9 @@ import { CreateReceptionDto } from './dto/create-reception.dto';
 import { UpdateReceptionDto } from './dto/update-reception.dto';
 
 const BCRYPT_ROUNDS = 12;
-const FALLBACK_PASSWORD = 'ChangeMe123!';
 
 const receptionInclude = {
-  user: true,
+  user: { select: { phone: true, name: true } },
   gym: true,
 } satisfies Prisma.ReceptionInclude;
 
@@ -62,8 +61,7 @@ export class ReceptionsService {
 
     const initialPassword =
       dto.password ??
-      this.configService.get<string>('DEFAULT_CLIENT_PASSWORD') ??
-      FALLBACK_PASSWORD;
+      this.configService.getOrThrow<string>('DEFAULT_CLIENT_PASSWORD');
     const passwordHash = await bcrypt.hash(initialPassword, BCRYPT_ROUNDS);
 
     try {
@@ -130,6 +128,12 @@ export class ReceptionsService {
             data: { gymId: dto.gym_id },
           });
         }
+
+        if (passwordHash) {
+          await tx.refreshToken.deleteMany({
+            where: { userId: reception.userId },
+          });
+        }
       });
     } catch (error) {
       this.rethrowUniquePhone(error);
@@ -137,6 +141,29 @@ export class ReceptionsService {
     }
 
     return this.findOne(id);
+  }
+
+  async resetPassword(
+    id: string,
+    password?: string,
+  ): Promise<{ new_password: string }> {
+    const reception = await this.findEntity(id);
+    const newPassword =
+      password ??
+      this.configService.getOrThrow<string>('DEFAULT_CLIENT_PASSWORD');
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: reception.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshToken.deleteMany({
+        where: { userId: reception.userId },
+      }),
+    ]);
+
+    return { new_password: newPassword };
   }
 
   async remove(id: string): Promise<void> {

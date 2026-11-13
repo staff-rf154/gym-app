@@ -5,15 +5,21 @@ import {
 } from '@nestjs/common';
 import { Gym } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_TTL, RedisService } from '../redis/redis.service';
 import { CreateGymDto } from './dto/create-gym.dto';
 import { UpdateGymDto } from './dto/update-gym.dto';
 
 @Injectable()
 export class GymsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   findAll(): Promise<Gym[]> {
-    return this.prisma.gym.findMany({ orderBy: { createdAt: 'asc' } });
+    return this.redis.getOrSet('cache:gyms:all', CACHE_TTL.reference, () =>
+      this.prisma.gym.findMany({ orderBy: { createdAt: 'asc' } }),
+    );
   }
 
   async findOne(id: string): Promise<Gym> {

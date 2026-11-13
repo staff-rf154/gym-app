@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Alert,
   Button,
+  Checkbox,
   Empty,
   Form,
   Input,
@@ -18,6 +19,7 @@ import GymsDrawer from '../../components/GymsDrawer';
 import PhotoUpload from '../../components/PhotoUpload';
 import { useCrudModal } from '../../hooks/useCrudModal';
 import { useTableSearch } from '../../hooks/useTableSearch';
+import type { PaginatedResponse } from '../../types/pagination';
 
 interface Trainer {
   id: string;
@@ -25,6 +27,8 @@ interface Trainer {
   phone: string;
   name: string;
   photoUrl: string | null;
+  isActive: boolean;
+  archivedAt: string | null;
 }
 
 interface TrainerFormValues {
@@ -44,6 +48,7 @@ export default function TrainersPage() {
     close,
   } = useCrudModal<Trainer>();
   const [gymsTrainer, setGymsTrainer] = useState<Trainer | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const {
     data: trainers = [],
@@ -51,10 +56,13 @@ export default function TrainersPage() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ['trainers'],
+    queryKey: ['trainers', showArchived],
     queryFn: async () => {
-      const { data } = await api.get<Trainer[]>('/admin/trainers');
-      return data;
+      const { data } = await api.get<PaginatedResponse<Trainer>>(
+        '/admin/trainers',
+        { params: { limit: 100, include_archived: showArchived } },
+      );
+      return data.items;
     },
   });
 
@@ -116,9 +124,9 @@ export default function TrainersPage() {
     mutationFn: (id: string) => api.delete(`/admin/trainers/${id}`),
     onSuccess: () => {
       invalidate();
-      message.success('Тренер удалён');
+      message.success('Тренер архивирован');
     },
-    onError: () => message.error('Не удалось удалить тренера'),
+    onError: () => message.error('Не удалось архивировать тренера'),
   });
 
   const openCreateModal = () => {
@@ -147,6 +155,13 @@ export default function TrainersPage() {
   const columns: ColumnsType<Trainer> = [
     { title: 'ФИО', dataIndex: 'name', key: 'name' },
     { title: 'Телефон', dataIndex: 'phone', key: 'phone' },
+    {
+      title: 'Статус',
+      dataIndex: 'isActive',
+      key: 'isActive',
+      width: 120,
+      render: (value: boolean) => (value ? 'Активен' : 'В архиве'),
+    },
     {
       title: 'Фото',
       dataIndex: 'photoUrl',
@@ -177,16 +192,19 @@ export default function TrainersPage() {
           <Button type="link" onClick={() => openEditModal(trainer)}>
             Редактировать
           </Button>
-          <Popconfirm
-            title="Удалить тренера?"
-            okText="Удалить"
-            cancelText="Отмена"
-            onConfirm={() => deleteMutation.mutate(trainer.id)}
-          >
-            <Button type="link" danger>
-              Удалить
-            </Button>
-          </Popconfirm>
+          {trainer.isActive && (
+            <Popconfirm
+              title="Архивировать тренера?"
+              description="История сохранится, вход будет запрещён."
+              okText="Архивировать"
+              cancelText="Отмена"
+              onConfirm={() => deleteMutation.mutate(trainer.id)}
+            >
+              <Button type="link" danger>
+                Архивировать
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -206,6 +224,13 @@ export default function TrainersPage() {
         <Button type="primary" onClick={openCreateModal}>
           Создать тренера
         </Button>
+
+        <Checkbox
+          checked={showArchived}
+          onChange={(event) => setShowArchived(event.target.checked)}
+        >
+          Показать архив
+        </Checkbox>
       </Space>
 
       {isError && (

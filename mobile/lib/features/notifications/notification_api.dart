@@ -7,8 +7,12 @@ class NotificationsApi {
   final ApiClient _api;
 
   Future<List<AppNotification>> fetchNotifications() async {
-    final response = await _api.dio.get<List<dynamic>>('/notifications');
-    return (response.data ?? const [])
+    final response = await _api.dio.get<Map<String, dynamic>>(
+      '/notifications',
+      queryParameters: {'limit': 100},
+    );
+    final items = (response.data?['items'] as List<dynamic>?) ?? const [];
+    return items
         .cast<Map<String, dynamic>>()
         .map(AppNotification.fromJson)
         .toList();

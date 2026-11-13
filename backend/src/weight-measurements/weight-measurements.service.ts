@@ -36,10 +36,7 @@ export class WeightMeasurementsService {
   async findAllForAdmin(clientId: string): Promise<WeightMeasurement[]> {
     await this.ensureClient(clientId);
 
-    return this.prisma.weightMeasurement.findMany({
-      where: { clientId },
-      orderBy: { measuredAt: 'desc' },
-    });
+    return this.findByClient(clientId);
   }
 
   async createForAdmin(
@@ -50,6 +47,33 @@ export class WeightMeasurementsService {
     await this.ensureClient(clientId);
 
     return this.createMeasurement(userId, clientId, dto);
+  }
+
+  async findAllForReception(
+    clientId: string,
+    gymId: string,
+  ): Promise<WeightMeasurement[]> {
+    await this.ensureClientInGym(clientId, gymId);
+
+    return this.findByClient(clientId);
+  }
+
+  async createForReception(
+    userId: string,
+    clientId: string,
+    gymId: string,
+    dto: CreateWeightMeasurementDto,
+  ): Promise<WeightMeasurement> {
+    await this.ensureClientInGym(clientId, gymId);
+
+    return this.createMeasurement(userId, clientId, dto);
+  }
+
+  private findByClient(clientId: string): Promise<WeightMeasurement[]> {
+    return this.prisma.weightMeasurement.findMany({
+      where: { clientId },
+      orderBy: { measuredAt: 'desc' },
+    });
   }
 
   private createMeasurement(
@@ -67,6 +91,27 @@ export class WeightMeasurementsService {
         comment: dto.comment,
       },
     });
+  }
+
+  private async ensureClientInGym(
+    clientId: string,
+    gymId: string,
+  ): Promise<void> {
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+    });
+
+    if (!client) {
+      throw new NotFoundException('Client not found');
+    }
+
+    const link = await this.prisma.clientGym.findFirst({
+      where: { clientId, gymId, isActive: true },
+    });
+
+    if (!link) {
+      throw new ForbiddenException('Client is not active in your gym');
+    }
   }
 
   private async ensureClient(clientId: string): Promise<void> {

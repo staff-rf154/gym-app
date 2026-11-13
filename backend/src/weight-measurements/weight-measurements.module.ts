@@ -11,5 +11,6 @@ import { WeightMeasurementsService } from './weight-measurements.service';
     AdminWeightMeasurementsController,
   ],
   providers: [WeightMeasurementsService],
+  exports: [WeightMeasurementsService],
 })
 export class WeightMeasurementsModule {}

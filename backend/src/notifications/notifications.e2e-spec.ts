@@ -297,7 +297,7 @@ describe('Notifications (e2e)', () => {
 
     expect(response.status).toBe(200);
     expect(
-      response.body.map((item: { id: string }) => item.id),
+      response.body.items.map((item: { id: string }) => item.id),
     ).toEqual(expect.arrayContaining([gymNotificationId, allNotificationId]));
   });
 
@@ -306,10 +306,10 @@ describe('Notifications (e2e)', () => {
 
     expect(response.status).toBe(200);
     expect(
-      response.body.map((item: { id: string }) => item.id),
+      response.body.items.map((item: { id: string }) => item.id),
     ).toContain(allNotificationId);
     expect(
-      response.body.map((item: { id: string }) => item.id),
+      response.body.items.map((item: { id: string }) => item.id),
     ).not.toContain(gymNotificationId);
   });
 
@@ -321,7 +321,7 @@ describe('Notifications (e2e)', () => {
     expect(readResponse.status).toBe(204);
 
     const response = await authed(clientAToken).get('/notifications');
-    const notification = response.body.find(
+    const notification = response.body.items.find(
       (item: { id: string }) => item.id === gymNotificationId,
     );
 

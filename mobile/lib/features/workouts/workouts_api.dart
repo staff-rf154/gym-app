@@ -36,16 +36,18 @@ class WorkoutsApi {
     String? from,
     String? to,
   }) async {
-    final response = await _api.dio.get<List<dynamic>>(
+    final response = await _api.dio.get<Map<String, dynamic>>(
       '/trainer/workouts',
       queryParameters: {
+        'limit': 100,
         if (clientId != null && clientId.isNotEmpty) 'client_id': clientId,
         if (gymId != null && gymId.isNotEmpty) 'gym_id': gymId,
         if (from != null && from.isNotEmpty) 'from': from,
         if (to != null && to.isNotEmpty) 'to': to,
       },
     );
-    return (response.data ?? const [])
+    final items = (response.data?['items'] as List<dynamic>?) ?? const [];
+    return items
         .cast<Map<String, dynamic>>()
         .map(ClientWorkout.fromJson)
         .toList();

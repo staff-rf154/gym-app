@@ -14,6 +14,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import PhotoUpload from '../../components/PhotoUpload';
+import type { PaginatedResponse } from '../../types/pagination';
 
 interface Trainer {
   id: string;
@@ -44,8 +45,8 @@ export default function ReceptionTrainersPage() {
   } = useQuery({
     queryKey: ['reception-trainers'],
     queryFn: async () => {
-      const { data } = await api.get<Trainer[]>('/reception/trainers');
-      return data;
+      const { data } = await api.get<PaginatedResponse<Trainer>>('/reception/trainers', { params: { limit: 100 } });
+      return data.items;
     },
   });
 

@@ -7,9 +7,14 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateNotificationDto } from './dto/create-notification.dto';
@@ -39,8 +44,9 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Мои уведомления' })
   findAll(
     @CurrentUser('userId') userId: string,
-  ): Promise<NotificationResponse[]> {
-    return this.notificationsService.findForUser(userId);
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<NotificationResponse>> {
+    return this.notificationsService.findForUser(userId, query);
   }
 
   @Post('notifications/:id/read')

@@ -11,7 +11,13 @@ import {
 } from '../clients/clients.service';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { UpdateClientDto } from '../clients/dto/update-client.dto';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateWeightMeasurementDto } from '../weight-measurements/dto/create-weight-measurement.dto';
+import { WeightMeasurementsService } from '../weight-measurements/weight-measurements.service';
 import { CreateTrainerDto } from '../trainers/dto/create-trainer.dto';
 import { UpdateTrainerDto } from '../trainers/dto/update-trainer.dto';
 import {
@@ -24,6 +30,7 @@ export interface ReceptionGymResponse {
   id: string;
   name: string;
   address: string;
+  isActive: boolean;
 }
 
 export interface ReceptionClientTrainerResponse {
@@ -50,27 +57,28 @@ export class ReceptionService {
     private readonly prisma: PrismaService,
     private readonly clientsService: ClientsService,
     private readonly trainersService: TrainersService,
+    private readonly weightMeasurementsService: WeightMeasurementsService,
   ) {}
 
   async getGym(userId: string): Promise<ReceptionGymResponse> {
     const context = await this.getContext(userId);
+    const gym = await this.getGymEntity(context.gymId);
 
     return {
       id: context.gymId,
       name: context.gymName,
-      address: (await this.getGymEntity(context.gymId)).address,
+      address: gym.address,
+      isActive: gym.isActive,
     };
   }
 
-  async findClients(userId: string): Promise<ClientResponse[]> {
+  async findClients(
+    userId: string,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ClientResponse>> {
     const context = await this.getContext(userId);
-    const clients = await this.clientsService.findAll();
 
-    return clients.filter((client) =>
-      client.gyms.some(
-        (gym) => gym.gymId === context.gymId && gym.isActive,
-      ),
-    );
+    return this.clientsService.findAll(context.gymId, query);
   }
 
   async findClient(
@@ -80,7 +88,36 @@ export class ReceptionService {
     const context = await this.getContext(userId);
     await this.assertClientInGym(clientId, context.gymId);
 
-    return this.clientsService.findOne(clientId);
+    return this.clientsService.findOne(clientId, context.gymId);
+  }
+
+  async findWeightMeasurements(
+    userId: string,
+    clientId: string,
+  ) {
+    const context = await this.getContext(userId);
+    await this.assertClientInGym(clientId, context.gymId);
+
+    return this.weightMeasurementsService.findAllForReception(
+      clientId,
+      context.gymId,
+    );
+  }
+
+  async createWeightMeasurement(
+    userId: string,
+    clientId: string,
+    dto: CreateWeightMeasurementDto,
+  ) {
+    const context = await this.getContext(userId);
+    await this.assertClientInGym(clientId, context.gymId);
+
+    return this.weightMeasurementsService.createForReception(
+      userId,
+      clientId,
+      context.gymId,
+      dto,
+    );
   }
 
   async createClient(
@@ -111,15 +148,24 @@ export class ReceptionService {
     return this.updateClient(userId, clientId, { photoUrl });
   }
 
-  async findTrainers(userId: string): Promise<TrainerResponse[]> {
+  async resetClientPassword(
+    userId: string,
+    clientId: string,
+    password?: string,
+  ): Promise<{ new_password: string }> {
     const context = await this.getContext(userId);
-    const trainers = await this.trainersService.findAll();
+    await this.assertClientInGym(clientId, context.gymId);
 
-    return trainers.filter((trainer) =>
-      trainer.gyms.some(
-        (gym) => gym.gymId === context.gymId && gym.isActive,
-      ),
-    );
+    return this.clientsService.resetPassword(clientId, password);
+  }
+
+  async findTrainers(
+    userId: string,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<TrainerResponse>> {
+    const context = await this.getContext(userId);
+
+    return this.trainersService.findAll(context.gymId, query);
   }
 
   async createTrainer(
@@ -148,6 +194,17 @@ export class ReceptionService {
     photoUrl: string,
   ): Promise<TrainerResponse> {
     return this.updateTrainer(userId, trainerId, { photoUrl });
+  }
+
+  async resetTrainerPassword(
+    userId: string,
+    trainerId: string,
+    password?: string,
+  ): Promise<{ new_password: string }> {
+    const context = await this.getContext(userId);
+    await this.assertTrainerInGym(trainerId, context.gymId);
+
+    return this.trainersService.resetPassword(trainerId, password);
   }
 
   async findClientTrainers(

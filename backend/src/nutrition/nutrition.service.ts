@@ -14,6 +14,12 @@ function parseDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
+function todayInTimezone(timezone: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(
+    new Date(),
+  );
+}
+
 @Injectable()
 export class NutritionService {
   constructor(private readonly prisma: PrismaService) {}
@@ -99,14 +105,17 @@ export class NutritionService {
     userId: string,
     query: ClientNutritionQueryDto,
   ): Promise<NutritionRecommendation[]> {
-    const client = await this.prisma.client.findUnique({ where: { userId } });
+    const client = await this.prisma.client.findUnique({
+      where: { userId },
+      include: { user: { select: { timezone: true } } },
+    });
 
     if (!client) {
       throw new ForbiddenException('Client profile not found');
     }
 
     const date = parseDate(
-      query.date ?? new Date().toISOString().slice(0, 10),
+      query.date ?? todayInTimezone(client.user.timezone),
     );
 
     const where: Prisma.NutritionRecommendationWhereInput = {

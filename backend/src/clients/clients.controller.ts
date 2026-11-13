@@ -9,9 +9,15 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
+import { ResetPasswordDto } from '../auth/dto/reset-password.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import {
   ClientResponse,
@@ -30,8 +36,10 @@ export class ClientsController {
 
   @Get()
   @ApiOperation({ summary: 'Список клиентов' })
-  findAll(): Promise<ClientResponse[]> {
-    return this.clientsService.findAll();
+  findAll(
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ClientResponse>> {
+    return this.clientsService.findAll(undefined, query);
   }
 
   @Post()
@@ -47,6 +55,16 @@ export class ClientsController {
     @Body() dto: UpdateClientDto,
   ): Promise<ClientResponse> {
     return this.clientsService.update(id, dto);
+  }
+
+  @Post(':id/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Сбросить пароль клиента' })
+  resetPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ new_password: string }> {
+    return this.clientsService.resetPassword(id, dto.password);
   }
 
   @Delete(':id')

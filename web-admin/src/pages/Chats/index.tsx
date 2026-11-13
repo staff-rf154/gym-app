@@ -17,6 +17,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useAuthStore } from '../../store/auth';
+import type { PaginatedResponse } from '../../types/pagination';
 
 type ChatType = 'CLIENT_TRAINER' | 'CLIENT_ADMIN' | 'TRAINER_ADMIN';
 
@@ -63,8 +64,8 @@ export default function ChatsPage() {
   } = useQuery({
     queryKey: ['chats'],
     queryFn: async () => {
-      const { data } = await api.get<Chat[]>('/chats');
-      return data;
+      const { data } = await api.get<PaginatedResponse<Chat>>('/chats', { params: { limit: 100 } });
+      return data.items;
     },
     refetchInterval: 10000,
   });

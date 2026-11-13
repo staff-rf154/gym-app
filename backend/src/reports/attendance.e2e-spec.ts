@@ -428,7 +428,7 @@ describe('Reports attendance (e2e)', () => {
 
     const ownGym = await authedGet(
       trainerToken,
-      `/reports/attendance?gym_id=${gymId}`,
+      `/reports/attendance?from=2027-10-01&to=2027-10-31&gym_id=${gymId}`,
     );
     expect(ownGym.status).toBe(200);
 
@@ -446,6 +446,12 @@ describe('Reports attendance (e2e)', () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it('ADMIN без периода → 400', async () => {
+    const response = await authedGet(adminToken, '/reports/attendance');
+
+    expect(response.status).toBe(400);
   });
 
   it('CLIENT не имеет доступа к отчёту посещаемости', async () => {

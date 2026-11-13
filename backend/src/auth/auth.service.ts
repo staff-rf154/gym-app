@@ -61,6 +61,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid phone or password');
     }
 
+    if (await this.isArchivedTrainer(user)) {
+      throw new UnauthorizedException('Trainer is archived');
+    }
+
     return this.issueTokens(user);
   }
 
@@ -114,6 +118,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    if (await this.isArchivedTrainer(user)) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: user.id },
+      });
+      throw new UnauthorizedException('Trainer is archived');
+    }
+
     await this.prisma.refreshToken.deleteMany({
       where: { id: storedToken.id },
     });
@@ -124,6 +135,13 @@ export class AuthService {
   async getMe(userId: string): Promise<MeResponse> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      select: {
+        id: true,
+        role: true,
+        name: true,
+        phone: true,
+        timezone: true,
+      },
     });
 
     if (!user) {
@@ -137,6 +155,50 @@ export class AuthService {
       phone: user.phone,
       timezone: user.timezone,
     };
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    const isCurrentValid = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+
+    if (!isCurrentValid) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    if (currentPassword === newPassword) {
+      throw new BadRequestException(
+        'New password must differ from the current password',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+    ]);
+  }
+
+  async logout(userId: string): Promise<void> {
+    await this.prisma.refreshToken.deleteMany({ where: { userId } });
   }
 
   async updateTimezone(userId: string, timezone: string): Promise<void> {
@@ -165,6 +227,19 @@ export class AuthService {
         data: { pushToken: token },
       });
     });
+  }
+
+  private async isArchivedTrainer(user: User): Promise<boolean> {
+    if (user.role !== Role.TRAINER) {
+      return false;
+    }
+
+    const trainer = await this.prisma.trainer.findUnique({
+      where: { userId: user.id },
+      select: { isActive: true },
+    });
+
+    return trainer?.isActive === false;
   }
 
   private hashRefreshToken(token: string): string {

@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Notification, Role } from '@prisma/client';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { PushService } from './push.service';
@@ -35,10 +39,6 @@ export class NotificationsService {
       }
     }
 
-    const notification = await this.prisma.notification.create({
-      data: { gymId, title: dto.title, body: dto.body, senderId },
-    });
-
     const rawRecipients = gymId
       ? (
           await this.prisma.clientTrainer.findMany({
@@ -67,14 +67,22 @@ export class NotificationsService {
       ).values(),
     ];
 
-    if (recipients.length > 0) {
-      await this.prisma.notificationRecipient.createMany({
-        data: recipients.map((recipient) => ({
-          notificationId: notification.id,
-          userId: recipient.id,
-        })),
+    const notification = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.notification.create({
+        data: { gymId, title: dto.title, body: dto.body, senderId },
       });
-    }
+
+      if (recipients.length > 0) {
+        await tx.notificationRecipient.createMany({
+          data: recipients.map((recipient) => ({
+            notificationId: created.id,
+            userId: recipient.id,
+          })),
+        });
+      }
+
+      return created;
+    });
 
     const pushUserIds = recipients
       .filter((recipient) => Boolean(recipient.pushToken))
@@ -87,16 +95,28 @@ export class NotificationsService {
     return this.toResponse(notification, null);
   }
 
-  async findForUser(userId: string): Promise<NotificationResponse[]> {
-    const rows = await this.prisma.notificationRecipient.findMany({
-      where: { userId },
-      include: { notification: true },
-      orderBy: { notification: { createdAt: 'desc' } },
-    });
+  async findForUser(
+    userId: string,
+    query: PaginationQueryDto = new PaginationQueryDto(),
+  ): Promise<PaginatedResponse<NotificationResponse>> {
+    const where = { userId };
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.notificationRecipient.findMany({
+        where,
+        include: { notification: true },
+        orderBy: { notification: { createdAt: 'desc' } },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.notificationRecipient.count({ where }),
+    ]);
 
-    return rows.map((row) =>
-      this.toResponse(row.notification, row.readAt),
-    );
+    return {
+      items: rows.map((row) => this.toResponse(row.notification, row.readAt)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
   }
 
   async markRead(userId: string, notificationId: string): Promise<void> {

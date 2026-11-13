@@ -12,6 +12,7 @@ import {
   WorkoutStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_TTL, RedisService } from '../redis/redis.service';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 import { EquipmentUsageQueryDto } from './dto/equipment-usage-query.dto';
 import { ExerciseProgressQueryDto } from './dto/exercise-progress-query.dto';
@@ -154,9 +155,24 @@ function periodKey(date: Date, unit: 'day' | 'week' | 'month'): string {
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   async weightDynamics(
+    userId: string,
+    role: string,
+    query: WeightDynamicsQueryDto,
+  ): Promise<WeightDynamicsPoint[]> {
+    return this.redis.getOrSet(
+      this.reportCacheKey('weight-dynamics', userId, role, query),
+      CACHE_TTL.reports,
+      () => this.computeWeightDynamics(userId, role, query),
+    );
+  }
+
+  private async computeWeightDynamics(
     userId: string,
     role: string,
     query: WeightDynamicsQueryDto,
@@ -189,6 +205,18 @@ export class ReportsService {
   }
 
   async exerciseProgress(
+    userId: string,
+    role: string,
+    query: ExerciseProgressQueryDto,
+  ): Promise<ExerciseProgressResponse> {
+    return this.redis.getOrSet(
+      this.reportCacheKey('exercise-progress', userId, role, query),
+      CACHE_TTL.reports,
+      () => this.computeExerciseProgress(userId, role, query),
+    );
+  }
+
+  private async computeExerciseProgress(
     userId: string,
     role: string,
     query: ExerciseProgressQueryDto,
@@ -239,6 +267,18 @@ export class ReportsService {
     role: string,
     query: ExercisesSummaryQueryDto,
   ): Promise<ExerciseSummaryItem[]> {
+    return this.redis.getOrSet(
+      this.reportCacheKey('exercises-summary', userId, role, query),
+      CACHE_TTL.reports,
+      () => this.computeExercisesSummary(userId, role, query),
+    );
+  }
+
+  private async computeExercisesSummary(
+    userId: string,
+    role: string,
+    query: ExercisesSummaryQueryDto,
+  ): Promise<ExerciseSummaryItem[]> {
     const clientId = await this.resolveClientId(userId, role, query.client_id);
 
     const items = await this.prisma.workoutItem.findMany({
@@ -283,78 +323,91 @@ export class ReportsService {
     role: string,
     query: AttendanceQueryDto,
   ): Promise<AttendanceResponse> {
-    const scope = await this.resolveReportScope(userId, role, query);
-    const groupBy = query.group_by ?? 'day';
+    return this.redis.getOrSet(
+      this.reportCacheKey('attendance', userId, role, query),
+      CACHE_TTL.reports,
+      () => this.computeAttendance(userId, role, query),
+    );
+  }
 
-    const workouts = await this.prisma.workout.findMany({
-      where: {
-        status: WorkoutStatus.DONE,
-        date: this.buildDateFilter(query.from, query.to),
-        ...(scope.gymId ? { gymId: scope.gymId } : {}),
-        ...(scope.trainerId ? { trainerId: scope.trainerId } : {}),
-        ...(scope.clientId ? { clientId: scope.clientId } : {}),
-      },
-      select: {
-        date: true,
-        clientId: true,
-        client: { select: { user: { select: { name: true } } } },
-      },
-      orderBy: { date: 'asc' },
+  private async computeAttendance(
+    userId: string,
+    role: string,
+    query: AttendanceQueryDto,
+  ): Promise<AttendanceResponse> {
+    const scope = await this.resolveReportScope(userId, role, query);
+    this.assertPeriod(query.from, query.to);
+    const groupBy = query.group_by ?? 'day';
+    const where: Prisma.WorkoutWhereInput = {
+      status: WorkoutStatus.DONE,
+      date: this.buildDateFilter(query.from, query.to),
+      ...(scope.gymId ? { gymId: scope.gymId } : {}),
+      ...(scope.trainerId ? { trainerId: scope.trainerId } : {}),
+      ...(scope.clientId ? { clientId: scope.clientId } : {}),
+    };
+
+    const clientRows = await this.prisma.workout.groupBy({
+      by: ['clientId'],
+      where,
+      _count: { _all: true },
+      _max: { date: true },
     });
 
-    const uniqueClientIds = new Set<string>();
-    const dynamics = new Map<
-      string,
-      { visits: number; clients: Set<string> }
-    >();
-    const byClient = new Map<string, AttendanceClientItem>();
+    const totalVisits = clientRows.reduce(
+      (sum, row) => sum + row._count._all,
+      0,
+    );
+    const clientIds = clientRows.map((row) => row.clientId);
+    const clients =
+      clientIds.length > 0
+        ? await this.prisma.client.findMany({
+            where: { id: { in: clientIds } },
+            select: { id: true, user: { select: { name: true } } },
+          })
+        : [];
+    const names = new Map(
+      clients.map((client) => [client.id, client.user.name]),
+    );
 
-    for (const workout of workouts) {
-      uniqueClientIds.add(workout.clientId);
-
-      const key = periodKey(workout.date, groupBy);
-      const bucket = dynamics.get(key) ?? {
-        visits: 0,
-        clients: new Set<string>(),
-      };
-      bucket.visits += 1;
-      bucket.clients.add(workout.clientId);
-      dynamics.set(key, bucket);
-
-      const date = workout.date.toISOString().slice(0, 10);
-      const client = byClient.get(workout.clientId);
-
-      if (!client) {
-        byClient.set(workout.clientId, {
-          clientId: workout.clientId,
-          clientName: workout.client.user.name,
-          visits: 1,
-          lastVisitDate: date,
-        });
-      } else {
-        client.visits += 1;
-
-        if (date > client.lastVisitDate) {
-          client.lastVisitDate = date;
-        }
-      }
-    }
-
-    return {
-      totalVisits: workouts.length,
-      uniqueClients: uniqueClientIds.size,
-      dynamics: Array.from(dynamics.entries())
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([period, bucket]) => ({
-          period,
-          visits: bucket.visits,
-          uniqueClients: bucket.clients.size,
-        })),
-      byClient: Array.from(byClient.values()).sort(
+    const byClient: AttendanceClientItem[] = clientRows
+      .map((row) => ({
+        clientId: row.clientId,
+        clientName: names.get(row.clientId) ?? '',
+        visits: row._count._all,
+        lastVisitDate: (row._max.date ?? new Date())
+          .toISOString()
+          .slice(0, 10),
+      }))
+      .sort(
         (left, right) =>
           right.visits - left.visits ||
           left.clientName.localeCompare(right.clientName),
-      ),
+      );
+
+    const conditions = this.buildWorkoutSqlConditions(
+      query.from,
+      query.to,
+      scope,
+    );
+    const periodFormat = groupBy === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+    const dynamics = await this.prisma.$queryRaw<AttendanceDynamicsPoint[]>(
+      Prisma.sql`
+        SELECT
+          to_char(date_trunc(${Prisma.raw(`'${groupBy}'`)}, w.date), ${Prisma.raw(`'${periodFormat}'`)}) AS period,
+          COUNT(*)::int AS visits,
+          COUNT(DISTINCT w."clientId")::int AS "uniqueClients"
+        FROM "Workout" w
+        WHERE ${Prisma.join(conditions, ' AND ')}
+        GROUP BY 1
+        ORDER BY 1
+      `,
+    );
+
+    return {
+      totalVisits,
+      uniqueClients: clientRows.length,
+      dynamics,
+      byClient,
     };
   }
 
@@ -363,144 +416,125 @@ export class ReportsService {
     role: string,
     query: EquipmentUsageQueryDto,
   ): Promise<EquipmentUsageResponse> {
+    return this.redis.getOrSet(
+      this.reportCacheKey('equipment-usage', userId, role, query),
+      CACHE_TTL.reports,
+      () => this.computeEquipmentUsage(userId, role, query),
+    );
+  }
+
+  private async computeEquipmentUsage(
+    userId: string,
+    role: string,
+    query: EquipmentUsageQueryDto,
+  ): Promise<EquipmentUsageResponse> {
     const scope = await this.resolveReportScope(userId, role, query);
+    this.assertPeriod(query.from, query.to);
     const period = query.period ?? 'day';
+    const conditions = this.buildWorkoutSqlConditions(
+      query.from,
+      query.to,
+      scope,
+    );
+    const base = Prisma.sql`
+      FROM "WorkoutItem" wi
+      JOIN "Workout" w ON w.id = wi."workoutId"
+      JOIN "GymEquipment" e ON e.id = wi."equipmentId"
+      JOIN "Client" c ON c.id = w."clientId"
+      JOIN "User" u ON u.id = c."userId"
+      WHERE wi."equipmentId" IS NOT NULL
+        AND ${Prisma.join(conditions, ' AND ')}
+    `;
 
-    const items = await this.prisma.workoutItem.findMany({
-      where: {
-        equipmentId: { not: null },
-        workout: {
-          status: WorkoutStatus.DONE,
-          date: this.buildDateFilter(query.from, query.to),
-          ...(scope.gymId ? { gymId: scope.gymId } : {}),
-          ...(scope.trainerId ? { trainerId: scope.trainerId } : {}),
-          ...(scope.clientId ? { clientId: scope.clientId } : {}),
-        },
-      },
-      include: {
-        equipment: { select: { id: true, name: true, type: true } },
-        workout: {
-          select: {
-            date: true,
-            clientId: true,
-            client: { select: { user: { select: { name: true } } } },
-          },
-        },
-      },
-    });
+    const [totalRow] = await this.prisma.$queryRaw<{ total: number }[]>(
+      Prisma.sql`SELECT COUNT(*)::int AS total ${base}`,
+    );
+    const totalUsage = totalRow?.total ?? 0;
 
-    const totalUsage = items.length;
-    const typeMap = new Map<
-      GymEquipmentType,
-      { usageCount: number; clients: Set<string> }
-    >();
-    const equipmentMap = new Map<
-      string,
-      {
+    const typeRows = await this.prisma.$queryRaw<
+      Array<{ type: GymEquipmentType; usageCount: number; uniqueClients: number }>
+    >(Prisma.sql`
+      SELECT
+        e.type AS type,
+        COUNT(*)::int AS "usageCount",
+        COUNT(DISTINCT w."clientId")::int AS "uniqueClients"
+      ${base}
+      GROUP BY e.type
+      ORDER BY "usageCount" DESC
+    `);
+
+    const equipmentRows = await this.prisma.$queryRaw<
+      Array<{
+        equipmentId: string;
         equipmentName: string;
         type: GymEquipmentType;
         usageCount: number;
-        clients: Set<string>;
-      }
-    >();
-    const clientMap = new Map<string, EquipmentUsageClientItem>();
-    const dynamicsMap = new Map<string, number>();
+        uniqueClients: number;
+      }>
+    >(Prisma.sql`
+      SELECT
+        e.id AS "equipmentId",
+        e.name AS "equipmentName",
+        e.type AS type,
+        COUNT(*)::int AS "usageCount",
+        COUNT(DISTINCT w."clientId")::int AS "uniqueClients"
+      ${base}
+      GROUP BY e.id, e.name, e.type
+      ORDER BY "usageCount" DESC, e.name ASC
+    `);
 
-    for (const item of items) {
-      if (!item.equipment) {
-        continue;
-      }
+    const clientRows = await this.prisma.$queryRaw<
+      Array<{
+        clientId: string;
+        clientName: string;
+        equipmentId: string;
+        equipmentName: string;
+        usageCount: number;
+        lastUsedDate: string;
+      }>
+    >(Prisma.sql`
+      SELECT
+        w."clientId" AS "clientId",
+        u.name AS "clientName",
+        e.id AS "equipmentId",
+        e.name AS "equipmentName",
+        COUNT(*)::int AS "usageCount",
+        to_char(MAX(w.date), 'YYYY-MM-DD') AS "lastUsedDate"
+      ${base}
+      GROUP BY w."clientId", u.name, e.id, e.name
+      ORDER BY "usageCount" DESC, u.name ASC, e.name ASC
+    `);
 
-      const equipment = item.equipment;
-      const clientId = item.workout.clientId;
-      const clientName = item.workout.client.user.name;
-      const date = item.workout.date.toISOString().slice(0, 10);
-
-      const type = typeMap.get(equipment.type) ?? {
-        usageCount: 0,
-        clients: new Set<string>(),
-      };
-      type.usageCount += 1;
-      type.clients.add(clientId);
-      typeMap.set(equipment.type, type);
-
-      const equipmentEntry = equipmentMap.get(equipment.id) ?? {
-        equipmentName: equipment.name,
-        type: equipment.type,
-        usageCount: 0,
-        clients: new Set<string>(),
-      };
-      equipmentEntry.usageCount += 1;
-      equipmentEntry.clients.add(clientId);
-      equipmentMap.set(equipment.id, equipmentEntry);
-
-      const clientKey = `${clientId}:${equipment.id}`;
-      const existingClient = clientMap.get(clientKey);
-
-      if (!existingClient) {
-        clientMap.set(clientKey, {
-          clientId,
-          clientName,
-          equipmentId: equipment.id,
-          equipmentName: equipment.name,
-          usageCount: 1,
-          lastUsedDate: date,
-        });
-      } else {
-        existingClient.usageCount += 1;
-
-        if (date > existingClient.lastUsedDate) {
-          existingClient.lastUsedDate = date;
-        }
-      }
-
-      const key = periodKey(item.workout.date, period);
-      dynamicsMap.set(key, (dynamicsMap.get(key) ?? 0) + 1);
-    }
+    const periodFormat = period === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+    const dynamics = await this.prisma.$queryRaw<
+      EquipmentUsageDynamicsPoint[]
+    >(Prisma.sql`
+      SELECT
+        to_char(date_trunc(${Prisma.raw(`'${period}'`)}, w.date), ${Prisma.raw(`'${periodFormat}'`)}) AS period,
+        COUNT(*)::int AS "usageCount"
+      ${base}
+      GROUP BY 1
+      ORDER BY 1
+    `);
 
     const share = (count: number) =>
       totalUsage === 0 ? 0 : Number((count / totalUsage).toFixed(4));
-
-    const byEquipment = Array.from(equipmentMap.entries())
-      .map(([equipmentId, entry]) => ({
-        equipmentId,
-        equipmentName: entry.equipmentName,
-        type: entry.type,
-        usageCount: entry.usageCount,
-        uniqueClients: entry.clients.size,
-        share: share(entry.usageCount),
-      }))
-      .sort(
-        (left, right) =>
-          right.usageCount - left.usageCount ||
-          left.equipmentName.localeCompare(right.equipmentName),
-      );
-
+    const byType = typeRows.map((row) => ({
+      ...row,
+      share: share(row.usageCount),
+    }));
+    const byEquipment = equipmentRows.map((row) => ({
+      ...row,
+      share: share(row.usageCount),
+    }));
     const lastEquipment = byEquipment[byEquipment.length - 1];
 
     return {
       totalUsage,
-      byType: Array.from(typeMap.entries())
-        .map(([type, entry]) => ({
-          type,
-          usageCount: entry.usageCount,
-          uniqueClients: entry.clients.size,
-          share: share(entry.usageCount),
-        }))
-        .sort((left, right) => right.usageCount - left.usageCount),
+      byType,
       byEquipment,
-      byClient: Array.from(clientMap.values()).sort(
-        (left, right) =>
-          right.usageCount - left.usageCount ||
-          left.clientName.localeCompare(right.clientName) ||
-          left.equipmentName.localeCompare(right.equipmentName),
-      ),
-      dynamics: Array.from(dynamicsMap.entries())
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([periodKeyValue, usageCount]) => ({
-          period: periodKeyValue,
-          usageCount,
-        })),
+      byClient: clientRows,
+      dynamics,
       mostUsed: byEquipment[0]
         ? {
             equipmentId: byEquipment[0].equipmentId,
@@ -523,7 +557,20 @@ export class ReportsService {
     role: string,
     query: TrainersReportQueryDto,
   ): Promise<TrainerReportItem[]> {
+    return this.redis.getOrSet(
+      this.reportCacheKey('trainers', userId, role, query),
+      CACHE_TTL.reports,
+      () => this.computeTrainersReport(userId, role, query),
+    );
+  }
+
+  private async computeTrainersReport(
+    userId: string,
+    role: string,
+    query: TrainersReportQueryDto,
+  ): Promise<TrainerReportItem[]> {
     const scope = await this.resolveReportScope(userId, role, query);
+    this.assertPeriod(query.from, query.to);
 
     let trainerIds: string[];
 
@@ -552,7 +599,34 @@ export class ReportsService {
       orderBy: { user: { name: 'asc' } },
     });
 
+    const groups = await this.prisma.workout.groupBy({
+      by: ['trainerId', 'clientId'],
+      where: {
+        status: WorkoutStatus.DONE,
+        trainerId: { in: trainerIds },
+        date: this.buildDateFilter(query.from, query.to),
+        ...(scope.gymId ? { gymId: scope.gymId } : {}),
+      },
+      _count: { _all: true },
+    });
+
+    const clientIds = [...new Set(groups.map((group) => group.clientId))];
+    const clients =
+      clientIds.length > 0
+        ? await this.prisma.client.findMany({
+            where: { id: { in: clientIds } },
+            select: { id: true, user: { select: { name: true } } },
+          })
+        : [];
+    const clientNames = new Map(
+      clients.map((client) => [client.id, client.user.name]),
+    );
+
     const rows = new Map<string, TrainerReportItem>();
+    const clientsByTrainer = new Map<
+      string,
+      Map<string, TrainerReportClientItem>
+    >();
 
     for (const trainer of trainers) {
       rows.set(trainer.id, {
@@ -564,52 +638,28 @@ export class ReportsService {
       });
     }
 
-    const workouts = await this.prisma.workout.findMany({
-      where: {
-        status: WorkoutStatus.DONE,
-        trainerId: { in: trainerIds },
-        date: this.buildDateFilter(query.from, query.to),
-        ...(scope.gymId ? { gymId: scope.gymId } : {}),
-      },
-      select: {
-        trainerId: true,
-        clientId: true,
-        client: { select: { user: { select: { name: true } } } },
-      },
-    });
-
-    const clientsByTrainer = new Map<
-      string,
-      Map<string, TrainerReportClientItem>
-    >();
-
-    for (const workout of workouts) {
-      const row = rows.get(workout.trainerId);
+    for (const group of groups) {
+      const row = rows.get(group.trainerId);
 
       if (!row) {
         continue;
       }
 
-      row.visits += 1;
+      const visits = group._count._all;
+      row.visits += visits;
 
-      let clients = clientsByTrainer.get(workout.trainerId);
+      let clients = clientsByTrainer.get(group.trainerId);
 
       if (!clients) {
         clients = new Map<string, TrainerReportClientItem>();
-        clientsByTrainer.set(workout.trainerId, clients);
+        clientsByTrainer.set(group.trainerId, clients);
       }
 
-      const existing = clients.get(workout.clientId);
-
-      if (existing) {
-        existing.visits += 1;
-      } else {
-        clients.set(workout.clientId, {
-          clientId: workout.clientId,
-          clientName: workout.client.user.name,
-          visits: 1,
-        });
-      }
+      clients.set(group.clientId, {
+        clientId: group.clientId,
+        clientName: clientNames.get(group.clientId) ?? '',
+        visits,
+      });
     }
 
     const result = Array.from(rows.values());
@@ -631,6 +681,63 @@ export class ReportsService {
         right.visits - left.visits ||
         left.trainerName.localeCompare(right.trainerName),
     );
+  }
+
+  private reportCacheKey(
+    report: string,
+    userId: string,
+    role: string,
+    query: object,
+  ): string {
+    const params = Object.entries(query as Record<string, unknown>)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .sort(([left], [right]) => left.localeCompare(right));
+
+    return `cache:reports:${report}:${userId}:${role}:${JSON.stringify(params)}`;
+  }
+
+  private assertPeriod(from?: string, to?: string): void {
+    if (!from || !to) {
+      throw new BadRequestException('from and to are required');
+    }
+
+    if (new Date(from).getTime() > new Date(to).getTime()) {
+      throw new BadRequestException('from must be less than or equal to to');
+    }
+  }
+
+  private buildWorkoutSqlConditions(
+    from: string | undefined,
+    to: string | undefined,
+    scope: ReportScope,
+  ): Prisma.Sql[] {
+    const conditions: Prisma.Sql[] = [Prisma.sql`w.status = 'DONE'`];
+
+    if (from) {
+      conditions.push(
+        Prisma.sql`w.date >= ${new Date(`${from}T00:00:00.000Z`)}`,
+      );
+    }
+
+    if (to) {
+      conditions.push(
+        Prisma.sql`w.date <= ${new Date(`${to}T23:59:59.999Z`)}`,
+      );
+    }
+
+    if (scope.gymId) {
+      conditions.push(Prisma.sql`w."gymId" = ${scope.gymId}::uuid`);
+    }
+
+    if (scope.trainerId) {
+      conditions.push(Prisma.sql`w."trainerId" = ${scope.trainerId}::uuid`);
+    }
+
+    if (scope.clientId) {
+      conditions.push(Prisma.sql`w."clientId" = ${scope.clientId}::uuid`);
+    }
+
+    return conditions;
   }
 
   private buildDateFilter(

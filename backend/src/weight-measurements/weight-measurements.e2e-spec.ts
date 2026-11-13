@@ -11,6 +11,8 @@ const ADMIN_PHONE = '+79990000601';
 const TRAINER_PHONE = '+79990000602';
 const OTHER_TRAINER_PHONE = '+79990000603';
 const CLIENT_PHONE = '+79990000610';
+const RECEPTION_PHONE = '+79990000604';
+const OTHER_RECEPTION_PHONE = '+79990000605';
 const TEST_PASSWORD = 'TestPass123!';
 const MISSING_CLIENT_ID = '00000000-0000-4000-8000-000000000000';
 
@@ -29,6 +31,11 @@ describe('Weight measurements (e2e)', () => {
   let trainerToken: string;
   let otherTrainerToken: string;
   let clientToken: string;
+  let receptionUserId: string;
+  let otherReceptionUserId: string;
+  let otherGymId: string;
+  let receptionToken: string;
+  let otherReceptionToken: string;
 
   const login = async (phone: string): Promise<string> => {
     const response = await request(app.getHttpServer())
@@ -68,6 +75,8 @@ describe('Weight measurements (e2e)', () => {
       TRAINER_PHONE,
       OTHER_TRAINER_PHONE,
       CLIENT_PHONE,
+      RECEPTION_PHONE,
+      OTHER_RECEPTION_PHONE,
     ];
 
     await prisma.weightMeasurement.deleteMany({
@@ -76,13 +85,21 @@ describe('Weight measurements (e2e)', () => {
     await prisma.clientTrainer.deleteMany({
       where: { trainer: { user: { phone: { in: phones } } } },
     });
+    await prisma.clientGym.deleteMany({
+      where: { gym: { name: { in: ['E2E Weight Gym', 'E2E Other Weight Gym'] } } },
+    });
     await prisma.client.deleteMany({
       where: { user: { phone: CLIENT_PHONE } },
     });
     await prisma.trainer.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
-    await prisma.gym.deleteMany({ where: { name: 'E2E Weight Gym' } });
+    await prisma.reception.deleteMany({
+      where: { user: { phone: { in: [RECEPTION_PHONE, OTHER_RECEPTION_PHONE] } } },
+    });
+    await prisma.gym.deleteMany({
+      where: { name: { in: ['E2E Weight Gym', 'E2E Other Weight Gym'] } },
+    });
     await prisma.refreshToken.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
@@ -149,11 +166,47 @@ describe('Weight measurements (e2e)', () => {
     await prisma.clientTrainer.create({
       data: { clientId, trainerId, gymId },
     });
+    await prisma.clientGym.create({
+      data: { clientId, gymId },
+    });
+
+    const otherGym = await prisma.gym.create({
+      data: { name: 'E2E Other Weight Gym', address: 'ул. Чужая, 2' },
+    });
+    otherGymId = otherGym.id;
+
+    const receptionUser = await prisma.user.create({
+      data: {
+        phone: RECEPTION_PHONE,
+        passwordHash,
+        role: Role.RECEPTION,
+        name: 'E2E Ресепшен',
+      },
+    });
+    receptionUserId = receptionUser.id;
+    await prisma.reception.create({
+      data: { userId: receptionUser.id, gymId },
+    });
+
+    const otherReceptionUser = await prisma.user.create({
+      data: {
+        phone: OTHER_RECEPTION_PHONE,
+        passwordHash,
+        role: Role.RECEPTION,
+        name: 'E2E Другой ресепшен',
+      },
+    });
+    otherReceptionUserId = otherReceptionUser.id;
+    await prisma.reception.create({
+      data: { userId: otherReceptionUser.id, gymId: otherGymId },
+    });
 
     adminToken = await login(ADMIN_PHONE);
     trainerToken = await login(TRAINER_PHONE);
     otherTrainerToken = await login(OTHER_TRAINER_PHONE);
     clientToken = await login(CLIENT_PHONE);
+    receptionToken = await login(RECEPTION_PHONE);
+    otherReceptionToken = await login(OTHER_RECEPTION_PHONE);
   });
 
   afterAll(async () => {
@@ -161,11 +214,17 @@ describe('Weight measurements (e2e)', () => {
     await prisma.clientTrainer.deleteMany({
       where: { clientId },
     });
+    await prisma.clientGym.deleteMany({ where: { clientId } });
+    await prisma.reception.deleteMany({
+      where: {
+        userId: { in: [receptionUserId, otherReceptionUserId] },
+      },
+    });
     await prisma.client.deleteMany({ where: { id: clientId } });
     await prisma.trainer.deleteMany({
       where: { id: { in: [trainerId, otherTrainerId] } },
     });
-    await prisma.gym.deleteMany({ where: { id: gymId } });
+    await prisma.gym.deleteMany({ where: { id: { in: [gymId, otherGymId] } } });
     await prisma.refreshToken.deleteMany({
       where: {
         userId: {
@@ -174,6 +233,8 @@ describe('Weight measurements (e2e)', () => {
             trainerUserId,
             otherTrainerUserId,
             clientUserId,
+            receptionUserId,
+            otherReceptionUserId,
           ],
         },
       },
@@ -186,6 +247,8 @@ describe('Weight measurements (e2e)', () => {
             trainerUserId,
             otherTrainerUserId,
             clientUserId,
+            receptionUserId,
+            otherReceptionUserId,
           ],
         },
       },
@@ -283,6 +346,58 @@ describe('Weight measurements (e2e)', () => {
     const response = await authed(otherTrainerToken)
       .post(`/client/${clientId}/weight-measurements`)
       .send({ weight: 80, measuredAt: '2026-11-05T10:00:00.000Z' });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST админом → 201 с measuredBy администратора', async () => {
+    const response = await authed(adminToken)
+      .post(`/admin/clients/${clientId}/weight-measurements`)
+      .send({ weight: 78, measuredAt: '2026-11-06T10:00:00.000Z' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      clientId,
+      measuredBy: adminId,
+      weight: 78,
+    });
+  });
+
+  it('GET админом через admin-эндпоинт → 200', async () => {
+    const response = await authed(adminToken).get(
+      `/admin/clients/${clientId}/weight-measurements`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('POST ресепшеном своего зала → 201', async () => {
+    const response = await authed(receptionToken)
+      .post(`/reception/clients/${clientId}/weight-measurements`)
+      .send({ weight: 77, measuredAt: '2026-11-07T10:00:00.000Z' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      clientId,
+      measuredBy: receptionUserId,
+      weight: 77,
+    });
+  });
+
+  it('GET ресепшеном своего зала → 200', async () => {
+    const response = await authed(receptionToken).get(
+      `/reception/clients/${clientId}/weight-measurements`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('POST ресепшеном чужого зала → 403', async () => {
+    const response = await authed(otherReceptionToken)
+      .post(`/reception/clients/${clientId}/weight-measurements`)
+      .send({ weight: 76, measuredAt: '2026-11-07T10:00:00.000Z' });
 
     expect(response.status).toBe(403);
   });

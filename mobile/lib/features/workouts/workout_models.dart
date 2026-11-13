@@ -116,12 +116,29 @@ class WorkoutTemplate {
     required this.name,
     this.description,
     this.items = const [],
+    this.scope = 'PERSONAL',
+    this.gymName,
   });
 
   final String id;
   final String name;
   final String? description;
   final List<WorkoutTemplateItem> items;
+  final String scope;
+  final String? gymName;
+
+  bool get isPersonal => scope == 'PERSONAL';
+
+  String get scopeLabel {
+    switch (scope) {
+      case 'GLOBAL':
+        return 'Общий';
+      case 'GYM':
+        return gymName == null ? 'Зал' : 'Зал: $gymName';
+      default:
+        return 'Личный';
+    }
+  }
 
   factory WorkoutTemplate.fromJson(Map<String, dynamic> json) {
     final items =
@@ -138,6 +155,8 @@ class WorkoutTemplate {
       name: json['name'] as String,
       description: json['description'] as String?,
       items: items,
+      scope: json['scope'] as String? ?? 'PERSONAL',
+      gymName: json['gymName'] as String?,
     );
   }
 }

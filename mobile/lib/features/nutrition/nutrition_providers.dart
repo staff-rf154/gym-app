@@ -9,12 +9,12 @@ final nutritionApiProvider = Provider<NutritionApi>(
 );
 
 final clientNutritionProvider =
-    FutureProvider.family<List<NutritionRecommendation>, String>(
+    FutureProvider.autoDispose.family<List<NutritionRecommendation>, String>(
       (ref, clientId) =>
           ref.watch(nutritionApiProvider).fetchForClient(clientId),
     );
 
 final clientDailyNutritionProvider =
-    FutureProvider.family<List<NutritionRecommendation>, DateTime>(
+    FutureProvider.autoDispose.family<List<NutritionRecommendation>, DateTime>(
       (ref, date) => ref.watch(nutritionApiProvider).fetchForDate(date),
     );

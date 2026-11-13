@@ -9,9 +9,16 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
+import { Role, WeightMeasurement } from '@prisma/client';
+import {
+  PaginatedResponse,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
+import { ResetPasswordDto } from '../auth/dto/reset-password.dto';
+import { CreateWeightMeasurementDto } from '../weight-measurements/dto/create-weight-measurement.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ClientResponse, CreateClientResponse } from '../clients/clients.service';
@@ -48,8 +55,56 @@ export class ReceptionController {
   @ApiOperation({ summary: 'Клиенты моего зала' })
   findClients(
     @CurrentUser('userId') userId: string,
-  ): Promise<ClientResponse[]> {
-    return this.receptionService.findClients(userId);
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ClientResponse>> {
+    return this.receptionService.findClients(userId, query);
+  }
+
+  @Get('clients/:id')
+  @ApiOperation({ summary: 'Клиент своего зала' })
+  findClient(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) clientId: string,
+  ): Promise<ClientResponse> {
+    return this.receptionService.findClient(userId, clientId);
+  }
+
+  @Get('clients/:id/weight-measurements')
+  @ApiOperation({ summary: 'Замеры веса клиента своего зала' })
+  findWeightMeasurements(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) clientId: string,
+  ): Promise<WeightMeasurement[]> {
+    return this.receptionService.findWeightMeasurements(userId, clientId);
+  }
+
+  @Post('clients/:id/weight-measurements')
+  @ApiOperation({ summary: 'Добавить замер веса клиента своего зала' })
+  createWeightMeasurement(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateWeightMeasurementDto,
+  ): Promise<WeightMeasurement> {
+    return this.receptionService.createWeightMeasurement(
+      userId,
+      clientId,
+      dto,
+    );
+  }
+
+  @Post('clients/:id/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Сбросить пароль клиента своего зала' })
+  resetClientPassword(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) clientId: string,
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ new_password: string }> {
+    return this.receptionService.resetClientPassword(
+      userId,
+      clientId,
+      dto.password,
+    );
   }
 
   @Post('clients')
@@ -123,8 +178,24 @@ export class ReceptionController {
   @ApiOperation({ summary: 'Тренеры моего зала' })
   findTrainers(
     @CurrentUser('userId') userId: string,
-  ): Promise<TrainerResponse[]> {
-    return this.receptionService.findTrainers(userId);
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<TrainerResponse>> {
+    return this.receptionService.findTrainers(userId, query);
+  }
+
+  @Post('trainers/:id/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Сбросить пароль тренера своего зала' })
+  resetTrainerPassword(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) trainerId: string,
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ new_password: string }> {
+    return this.receptionService.resetTrainerPassword(
+      userId,
+      trainerId,
+      dto.password,
+    );
   }
 
   @Post('trainers')

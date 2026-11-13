@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'node:path';
@@ -20,6 +20,9 @@ import { HealthController } from './health/health.controller';
 import { NotificationsModule } from './notifications/notifications.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { CacheInvalidationInterceptor } from './redis/cache-invalidation.interceptor';
+import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
+import { RedisModule } from './redis/redis.module';
 import { ReceptionModule } from './reception/reception.module';
 import { ReceptionsModule } from './receptions/receptions.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -42,6 +45,7 @@ import { WorkoutsModule } from './workouts/workouts.module';
           'JWT_REFRESH_SECRET',
           'ADMIN_PHONE',
           'ADMIN_PASSWORD',
+          'DEFAULT_CLIENT_PASSWORD',
           'DEFAULT_TIMEZONE',
         ];
         const secrets = [
@@ -83,6 +87,7 @@ import { WorkoutsModule } from './workouts/workouts.module';
         return config;
       },
     }),
+    RedisModule,
     PrismaModule,
     AuthModule,
     GymsModule,
@@ -105,12 +110,19 @@ import { WorkoutsModule } from './workouts/workouts.module';
     ReceptionModule,
     DashboardModule,
     DemoModule,
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000,
-        limit: 100,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [RedisThrottlerStorage],
+      useFactory: (storage: RedisThrottlerStorage) => ({
+        throttlers: [
+          {
+            ttl: 60_000,
+            limit: 100,
+          },
+        ],
+        storage,
+      }),
+    }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
@@ -134,6 +146,10 @@ import { WorkoutsModule } from './workouts/workouts.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: CacheInvalidationInterceptor,
     },
   ],
 })

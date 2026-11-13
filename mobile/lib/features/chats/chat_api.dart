@@ -9,8 +9,12 @@ class ChatApi {
   final ApiClient _apiClient;
 
   Future<List<ChatSummary>> fetchChats() async {
-    final response = await _apiClient.dio.get<List<dynamic>>('/chats');
-    return (response.data ?? const [])
+    final response = await _apiClient.dio.get<Map<String, dynamic>>(
+      '/chats',
+      queryParameters: {'limit': 100},
+    );
+    final items = (response.data?['items'] as List<dynamic>?) ?? const [];
+    return items
         .cast<Map<String, dynamic>>()
         .map(ChatSummary.fromJson)
         .toList();

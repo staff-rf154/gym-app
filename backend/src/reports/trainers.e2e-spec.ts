@@ -337,7 +337,7 @@ describe('Reports trainers (e2e)', () => {
 
     const byTrainer = await authedGet(
       adminToken,
-      `/reports/trainers?trainer_id=${otherTrainerId}`,
+      `/reports/trainers?from=2026-10-01&to=2026-10-31&trainer_id=${otherTrainerId}`,
     );
     expect(byTrainer.status).toBe(200);
     expect(byTrainer.body).toHaveLength(1);
@@ -361,13 +361,13 @@ describe('Reports trainers (e2e)', () => {
   it('RECEPTION: чужой зал и чужой тренер → 403', async () => {
     const foreignGym = await authedGet(
       receptionToken,
-      `/reports/trainers?gym_id=${otherGymId}`,
+      `/reports/trainers?from=2026-10-01&to=2026-10-31&gym_id=${otherGymId}`,
     );
     expect(foreignGym.status).toBe(403);
 
     const foreignTrainer = await authedGet(
       receptionToken,
-      `/reports/trainers?trainer_id=${otherTrainerId}`,
+      `/reports/trainers?from=2026-10-01&to=2026-10-31&trainer_id=${otherTrainerId}`,
     );
     expect(foreignTrainer.status).toBe(403);
   });
@@ -388,9 +388,15 @@ describe('Reports trainers (e2e)', () => {
 
     const foreign = await authedGet(
       trainerToken,
-      `/reports/trainers?trainer_id=${otherTrainerId}`,
+      `/reports/trainers?from=2026-10-01&to=2026-10-31&trainer_id=${otherTrainerId}`,
     );
     expect(foreign.status).toBe(403);
+  });
+
+  it('ADMIN без периода → 400', async () => {
+    const response = await authedGet(adminToken, '/reports/trainers');
+
+    expect(response.status).toBe(400);
   });
 
   it('CLIENT не имеет доступа к отчёту по тренерам', async () => {
