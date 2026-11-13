@@ -74,6 +74,11 @@ describe('Auth (e2e)', () => {
 
   it('POST /auth/login с верными данными → 200', async () => {
     const response = await login();
+    const header = response.headers['set-cookie'];
+    const cookies = Array.isArray(header) ? header : [header];
+    const refreshCookie = cookies.find((cookie) =>
+      cookie?.startsWith('refresh_token='),
+    );
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -82,6 +87,31 @@ describe('Auth (e2e)', () => {
       role: Role.CLIENT,
       user_id: userId,
     });
+    expect(refreshCookie).toContain('HttpOnly');
+    expect(refreshCookie).toContain('SameSite=Strict');
+    expect(refreshCookie).not.toContain('Secure');
+  });
+
+  it('HTTPS-прокси ставит Secure cookie и refresh работает по cookie', async () => {
+    const loginResponse = await request(app.getHttpServer())
+      .post(`${API_PREFIX}/auth/login`)
+      .set('X-Forwarded-Proto', 'https')
+      .send({ phone: TEST_PHONE, password: TEST_PASSWORD });
+    const header = loginResponse.headers['set-cookie'];
+    const cookies = Array.isArray(header) ? header : [header];
+    const refreshCookie = cookies.find((cookie) =>
+      cookie?.startsWith('refresh_token='),
+    );
+
+    expect(refreshCookie).toContain('Secure');
+
+    const response = await request(app.getHttpServer())
+      .post(`${API_PREFIX}/auth/refresh`)
+      .set('Cookie', refreshCookie?.split(';')[0] ?? '')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.access_token).toEqual(expect.any(String));
   });
 
   it('POST /auth/login с неверным паролем → 401', async () => {

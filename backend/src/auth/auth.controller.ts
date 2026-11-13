@@ -24,9 +24,17 @@ import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { UpdateTimezoneDto } from './dto/update-timezone.dto';
 import type { RefreshPayload } from './strategies/jwt-refresh.strategy';
 
-interface RequestWithRefreshUser {
+interface RequestWithProtocol {
+  secure?: boolean;
+  headers?: { 'x-forwarded-proto'?: string | string[] };
+}
+
+interface RequestWithRefreshUser extends RequestWithProtocol {
   user: RefreshPayload;
-  headers?: { cookie?: string };
+  headers?: {
+    cookie?: string;
+    'x-forwarded-proto'?: string | string[];
+  };
   body?: { refresh_token?: string };
 }
 
@@ -45,22 +53,47 @@ const REFRESH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: 'strict' as const,
-  secure: process.env.NODE_ENV === 'production',
   path: '/api/v1/auth',
 };
+
+function isSecureRequest(request?: RequestWithProtocol): boolean {
+  const forwarded = request?.headers?.['x-forwarded-proto'];
+  const proto = Array.isArray(forwarded)
+    ? forwarded[0]
+    : forwarded?.split(',')[0]?.trim();
+
+  if (proto) {
+    return proto.toLowerCase() === 'https';
+  }
+
+  return request?.secure === true;
+}
+
+function refreshCookieOptions(
+  request?: RequestWithProtocol,
+): Record<string, unknown> {
+  return {
+    ...REFRESH_COOKIE_OPTIONS,
+    secure: isSecureRequest(request),
+  };
+}
 
 function setRefreshCookie(
   response: ResponseWithCookie,
   token: string,
+  request?: RequestWithProtocol,
 ): void {
   response.cookie(REFRESH_COOKIE, token, {
-    ...REFRESH_COOKIE_OPTIONS,
+    ...refreshCookieOptions(request),
     maxAge: REFRESH_COOKIE_MAX_AGE,
   });
 }
 
-function clearRefreshCookie(response: ResponseWithCookie): void {
-  response.clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_OPTIONS);
+function clearRefreshCookie(
+  response: ResponseWithCookie,
+  request?: RequestWithProtocol,
+): void {
+  response.clearCookie(REFRESH_COOKIE, refreshCookieOptions(request));
 }
 
 function extractRefreshToken(
@@ -96,10 +129,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Вход по телефону и паролю' })
   async login(
     @Body() dto: LoginDto,
+    @Req() request: RequestWithProtocol,
     @Res({ passthrough: true }) response: ResponseWithCookie,
   ): Promise<TokenResponse> {
     const tokens = await this.authService.login(dto);
-    setRefreshCookie(response, tokens.refresh_token);
+    setRefreshCookie(response, tokens.refresh_token, request);
     return tokens;
   }
 
@@ -124,7 +158,7 @@ export class AuthController {
       refreshToken,
       request.user,
     );
-    setRefreshCookie(response, tokens.refresh_token);
+    setRefreshCookie(response, tokens.refresh_token, request);
     return tokens;
   }
 
@@ -134,10 +168,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Выход и отзыв refresh-токенов' })
   async logout(
     @CurrentUser('userId') userId: string,
+    @Req() request: RequestWithProtocol,
     @Res({ passthrough: true }) response: ResponseWithCookie,
   ): Promise<void> {
     await this.authService.logout(userId);
-    clearRefreshCookie(response);
+    clearRefreshCookie(response, request);
   }
 
   @Post('change-password')
@@ -147,6 +182,7 @@ export class AuthController {
   async changePassword(
     @CurrentUser('userId') userId: string,
     @Body() dto: ChangePasswordDto,
+    @Req() request: RequestWithProtocol,
     @Res({ passthrough: true }) response: ResponseWithCookie,
   ): Promise<void> {
     await this.authService.changePassword(
@@ -154,7 +190,7 @@ export class AuthController {
       dto.current_password,
       dto.new_password,
     );
-    clearRefreshCookie(response);
+    clearRefreshCookie(response, request);
   }
 
   @Get('me')
