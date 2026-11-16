@@ -115,6 +115,7 @@
 - Backend e2e: 36 suites / 283 tests PASS.
 - Web-admin lint/build — PASS (4 warnings).
 - Flutter analyze/test — PASS (25 tests).
+- Mobile release: APK 60.8 MB и AAB 58.0 MB пересобраны.
 - Docker Compose: 4/4 контейнера healthy, health 200, PDF 200 `%PDF-`.
 
 ## Статус

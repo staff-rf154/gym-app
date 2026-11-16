@@ -86,6 +86,21 @@ flutter test
   Покрыты `matchesWorkoutPeriod` (включая `previousWeek`) и smoke-тесты
   экранов M8–M18.
 
+### Mobile: релизная сборка
+
+```bash
+cd mobile
+flutter build apk --release
+flutter build appbundle --release
+```
+
+Результат:
+
+- `build/app/outputs/flutter-apk/app-release.apk` — 60.8 MB.
+- `build/app/outputs/bundle/release/app-release.aab` — 58.0 MB.
+- Предупреждения о Built-in Kotlin и запуске от root ожидаемы для
+  сборочного окружения, сборка завершилась успешно.
+
 ### Docker Compose: релиз и smoke
 
 ```bash
@@ -117,5 +132,6 @@ Smoke:
 | web-admin build | PASS |
 | flutter analyze | PASS |
 | flutter test | 25 PASS |
+| flutter build apk/aab | PASS (60.8 MB / 58.0 MB) |
 | Docker Compose | 4/4 healthy |
 | PDF smoke | 3/3 доступных 200 `%PDF-` |
