@@ -10,19 +10,30 @@ class ClientWorkoutsApi {
     required DateTime from,
     required DateTime to,
   }) async {
-    final response = await _api.dio.get<Map<String, dynamic>>(
-      '/client/workouts',
-      queryParameters: {
-        'from': _dateOnly(from),
-        'to': _dateOnly(to),
-        'limit': 100,
-      },
-    );
-    final items = (response.data?['items'] as List<dynamic>?) ?? const [];
-    return items
-        .cast<Map<String, dynamic>>()
-        .map(ClientWorkout.fromJson)
-        .toList();
+    final workouts = <ClientWorkout>[];
+    var page = 1;
+    while (true) {
+      final response = await _api.dio.get<Map<String, dynamic>>(
+        '/client/workouts',
+        queryParameters: {
+          'from': _dateOnly(from),
+          'to': _dateOnly(to),
+          'limit': 100,
+          'page': page,
+        },
+      );
+      final items = (response.data?['items'] as List<dynamic>?) ?? const [];
+      workouts.addAll(
+        items.cast<Map<String, dynamic>>().map(ClientWorkout.fromJson),
+      );
+      final total = (response.data?['total'] as num?)?.toInt();
+      if (items.length < 100 ||
+          (total != null && workouts.length >= total)) {
+        break;
+      }
+      page++;
+    }
+    return workouts;
   }
 
   Future<ClientWorkout> fetchWorkout(String id) async {

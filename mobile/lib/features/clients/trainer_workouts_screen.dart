@@ -1,23 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/utils/timezone.dart';
+import '../../core/widgets/empty_state.dart';
+import '../auth/auth_controller.dart';
 import '../client/client_workout_models.dart';
 import '../client/workout_execution.dart';
+import '../workouts/workout_builder_screen.dart';
 import '../workouts/workouts_api.dart';
 import '../workouts/workouts_providers.dart';
 
 class TrainerWorkoutsScreen extends ConsumerStatefulWidget {
-  const TrainerWorkoutsScreen({super.key});
+  const TrainerWorkoutsScreen({super.key, this.date});
+
+  final DateTime? date;
 
   @override
   ConsumerState<TrainerWorkoutsScreen> createState() =>
       _TrainerWorkoutsScreenState();
 }
 
-class _TrainerWorkoutsScreenState
-    extends ConsumerState<TrainerWorkoutsScreen> {
+class _TrainerWorkoutsScreenState extends ConsumerState<TrainerWorkoutsScreen> {
   final _controllers = <String, WorkoutItemControllers>{};
   final _steps = <String, int>{};
   List<ClientWorkout> _workouts = const [];
@@ -25,16 +32,24 @@ class _TrainerWorkoutsScreenState
   bool _saving = false;
   String? _error;
   String? _selectedWorkoutId;
+  String? _finishingWorkoutId;
   String? _actionWorkoutId;
+  String? _statusFilter;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _refreshTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _load(silent: true),
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     for (final controller in _controllers.values) {
       controller.dispose();
     }
@@ -45,41 +60,48 @@ class _TrainerWorkoutsScreenState
 
   void _ensureControllers(ClientWorkout workout) {
     for (final item in workout.items) {
-      _controllers.putIfAbsent(
-        item.id,
-        () => WorkoutItemControllers(item),
-      );
+      _controllers.putIfAbsent(item.id, () => WorkoutItemControllers(item));
     }
     _steps.putIfAbsent(workout.id, () => 0);
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
-      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final workouts = await _api.fetchTrainerWorkouts(
-        from: today,
-        to: today,
-      );
+      final date = widget.date ?? DateTime.now();
+      final day = DateFormat('yyyy-MM-dd').format(date);
+      final workouts = await _api.fetchTrainerWorkouts(from: day, to: day);
       if (!mounted) {
         return;
       }
       for (final workout in workouts) {
         _ensureControllers(workout);
       }
+      workouts.sort((a, b) {
+        final byTime = (a.startTime ?? '99:99').compareTo(
+          b.startTime ?? '99:99',
+        );
+        if (byTime != 0) {
+          return byTime;
+        }
+        return (a.clientName ?? '').compareTo(b.clientName ?? '');
+      });
       setState(() {
         _workouts = workouts;
         _loading = false;
+        _error = null;
         if (!workouts.any((workout) => workout.id == _selectedWorkoutId)) {
           _selectedWorkoutId = null;
         }
       });
     } catch (error) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _error = apiErrorMessage(error);
           _loading = false;
@@ -96,26 +118,6 @@ class _TrainerWorkoutsScreenState
       }
       _ensureControllers(updated);
     });
-  }
-
-  Future<void> _start(ClientWorkout workout) async {
-    setState(() => _actionWorkoutId = workout.id);
-    try {
-      final updated = await _api.startTrainerWorkout(workout.id);
-      if (!mounted) {
-        return;
-      }
-      _replaceWorkout(updated);
-      setState(() => _selectedWorkoutId = updated.id);
-    } catch (error) {
-      if (mounted) {
-        _showMessage(apiErrorMessage(error));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _actionWorkoutId = null);
-      }
-    }
   }
 
   Future<void> _finish(ClientWorkout workout) async {
@@ -158,6 +160,9 @@ class _TrainerWorkoutsScreenState
       setState(() {
         if (_selectedWorkoutId == updated.id) {
           _selectedWorkoutId = null;
+        }
+        if (_finishingWorkoutId == updated.id) {
+          _finishingWorkoutId = null;
         }
       });
       _showMessage('Тренировка завершена');
@@ -225,6 +230,11 @@ class _TrainerWorkoutsScreenState
       return;
     }
 
+    if (workout.isLocked) {
+      setState(() => _steps[workout.id] = target);
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       final saved = await _persistItem(workout.items[step].id);
@@ -239,7 +249,21 @@ class _TrainerWorkoutsScreenState
   }
 
   void _setDone(String itemId, bool done) {
+    if (_finishingWorkoutId == null) {
+      return;
+    }
     setState(() => _controllers[itemId]!.done = done);
+  }
+
+  Future<void> _openBuilder(DateTime date) async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => WorkoutBuilderScreen(initialDate: date),
+      ),
+    );
+    if (created == true && mounted) {
+      await _load(silent: true);
+    }
   }
 
   void _showMessage(String message) {
@@ -258,9 +282,24 @@ class _TrainerWorkoutsScreenState
       }
     }
 
+    final day = widget.date ?? DateTime.now();
+    final now = DateTime.now();
+    final isToday =
+        day.year == now.year && day.month == now.month && day.day == now.day;
+
+    final timezone = ref.watch(authControllerProvider).value?.timezone ?? 'UTC';
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openBuilder(day),
+        icon: const Icon(Icons.add),
+        label: const Text('Добавить тренировку'),
+      ),
       appBar: AppBar(
-        title: const Text('Тренировки на сегодня'),
+        title: Text(
+          isToday
+              ? 'Тренировки на сегодня'
+              : 'Тренировки на ${DateFormat('dd.MM.yyyy').format(day)}',
+        ),
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
@@ -269,11 +308,16 @@ class _TrainerWorkoutsScreenState
           ),
         ],
       ),
-      body: _buildBody(context, selected),
+      body: _buildBody(context, selected, timezone),
     );
   }
 
-  Widget _buildBody(BuildContext context, ClientWorkout? selected) {
+  Widget _buildBody(
+    BuildContext context,
+    ClientWorkout? selected,
+    String timezone,
+  ) {
+    final day = widget.date ?? DateTime.now();
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -296,8 +340,13 @@ class _TrainerWorkoutsScreenState
       );
     }
 
+    final visible = _statusFilter == null
+        ? _workouts
+        : _workouts
+              .where((workout) => workout.status == _statusFilter)
+              .toList();
     final groups = <String, List<ClientWorkout>>{};
-    for (final workout in _workouts) {
+    for (final workout in visible) {
       groups.putIfAbsent(workout.clientId, () => []).add(workout);
     }
 
@@ -307,13 +356,47 @@ class _TrainerWorkoutsScreenState
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(12),
         children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final filter in const [
+                  (null, 'Все'),
+                  ('PLANNED', 'Запланированы'),
+                  ('IN_PROGRESS', 'В процессе'),
+                  ('COMPLETED', 'Завершены'),
+                  ('AUTO_CLOSED', 'Автозакрыты'),
+                  ('MISSED', 'Пропущены'),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(filter.$2),
+                      selected: _statusFilter == filter.$1,
+                      onSelected: (_) =>
+                          setState(() => _statusFilter = filter.$1),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           if (selected != null) ...[
             _SelectedWorkout(
               workout: selected,
               stepIndex: _steps[selected.id] ?? 0,
               controllers: _controllers,
               busy: _saving || _actionWorkoutId != null,
-              onClose: () => setState(() => _selectedWorkoutId = null),
+              timezone: timezone,
+              finishing: _finishingWorkoutId == selected.id,
+              onClose: () => setState(() {
+                _selectedWorkoutId = null;
+                _finishingWorkoutId = null;
+              }),
+              onStartFinishing: () => setState(() {
+                _selectedWorkoutId = selected.id;
+                _finishingWorkoutId = selected.id;
+              }),
               onDoneChanged: _setDone,
               onBack: () => _moveStep(selected, -1),
               onNext: () => _moveStep(selected, 1),
@@ -322,10 +405,13 @@ class _TrainerWorkoutsScreenState
             ),
             const SizedBox(height: 12),
           ],
-          if (_workouts.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: Text('На сегодня тренировок нет')),
+          if (visible.isEmpty)
+            EmptyState(
+              message: _statusFilter == null
+                  ? 'здесь пока пусто'
+                  : 'Нет тренировок с этим статусом',
+              actionLabel: _statusFilter == null ? 'Добавить тренировку' : null,
+              onAction: _statusFilter == null ? () => _openBuilder(day) : null,
             )
           else
             for (final entry in groups.entries) ...[
@@ -341,11 +427,16 @@ class _TrainerWorkoutsScreenState
                   workout: workout,
                   busy: _actionWorkoutId != null,
                   selected: workout.id == _selectedWorkoutId,
-                  onStart: workout.canStart ? () => _start(workout) : null,
-                  onOpen: workout.isInProgress
-                      ? () => setState(
-                          () => _selectedWorkoutId = workout.id,
-                        )
+                  timezone: timezone,
+                  onOpen: () => setState(() {
+                    _selectedWorkoutId = workout.id;
+                    _finishingWorkoutId = null;
+                  }),
+                  onFinish: workout.isInProgress
+                      ? () => setState(() {
+                          _selectedWorkoutId = workout.id;
+                          _finishingWorkoutId = workout.id;
+                        })
                       : null,
                 ),
                 const SizedBox(height: 8),
@@ -363,7 +454,10 @@ class _SelectedWorkout extends StatelessWidget {
     required this.stepIndex,
     required this.controllers,
     required this.busy,
+    required this.timezone,
+    required this.finishing,
     required this.onClose,
+    required this.onStartFinishing,
     required this.onDoneChanged,
     required this.onBack,
     required this.onNext,
@@ -375,7 +469,10 @@ class _SelectedWorkout extends StatelessWidget {
   final int stepIndex;
   final Map<String, WorkoutItemControllers> controllers;
   final bool busy;
+  final String timezone;
+  final bool finishing;
   final VoidCallback onClose;
+  final VoidCallback onStartFinishing;
   final void Function(String itemId, bool done) onDoneChanged;
   final VoidCallback onBack;
   final VoidCallback onNext;
@@ -406,11 +503,31 @@ class _SelectedWorkout extends StatelessWidget {
                 ),
               ],
             ),
+            if (workout.isInProgress && workout.autoFinishAt != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Автозакрытие: ${formatDateTimeInTimezone(workout.autoFinishAt, timezone)}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.tertiary,
+                  ),
+                ),
+              ),
+            if (!finishing && workout.isInProgress)
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: busy ? null : onStartFinishing,
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('Перейти к завершению'),
+                ),
+              ),
             WorkoutStepView(
               workout: workout,
               stepIndex: stepIndex,
               controllers: controllers,
               saving: busy,
+              editable: finishing,
               onDoneChanged: onDoneChanged,
               onBack: onBack,
               onNext: onNext,
@@ -429,15 +546,17 @@ class _TrainerWorkoutCard extends StatelessWidget {
     required this.workout,
     required this.busy,
     required this.selected,
-    this.onStart,
+    required this.timezone,
     this.onOpen,
+    this.onFinish,
   });
 
   final ClientWorkout workout;
   final bool busy;
   final bool selected;
-  final VoidCallback? onStart;
+  final String timezone;
   final VoidCallback? onOpen;
+  final VoidCallback? onFinish;
 
   @override
   Widget build(BuildContext context) {
@@ -465,7 +584,10 @@ class _TrainerWorkoutCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    workout.gymName ?? 'Зал',
+                    [
+                      if (workout.startTime != null) workout.timeLabel,
+                      workout.gymName ?? 'Зал',
+                    ].join(' · '),
                     style: theme.textTheme.bodySmall,
                   ),
                 ),
@@ -479,22 +601,42 @@ class _TrainerWorkoutCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(workout.comment!, style: theme.textTheme.bodySmall),
             ],
-            if (onStart != null || onOpen != null) ...[
+            if (workout.isInProgress && workout.autoFinishAt != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(
+                    Icons.timer_outlined,
+                    size: 16,
+                    color: theme.colorScheme.tertiary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Автозавершение в '
+                    '${formatDateTimeInTimezone(workout.autoFinishAt, timezone)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.tertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (onOpen != null || onFinish != null) ...[
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: [
-                  if (onStart != null)
-                    FilledButton.icon(
-                      onPressed: busy ? null : onStart,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Начать тренировку'),
-                    ),
                   if (onOpen != null)
-                    FilledButton.tonalIcon(
+                    OutlinedButton.icon(
                       onPressed: busy ? null : onOpen,
-                      icon: const Icon(Icons.fitness_center),
-                      label: const Text('Продолжить'),
+                      icon: const Icon(Icons.visibility_outlined),
+                      label: const Text('Открыть'),
+                    ),
+                  if (onFinish != null)
+                    FilledButton.tonalIcon(
+                      onPressed: busy ? null : onFinish,
+                      icon: const Icon(Icons.flag_outlined),
+                      label: const Text('Завершить'),
                     ),
                 ],
               ),

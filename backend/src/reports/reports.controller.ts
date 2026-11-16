@@ -1,14 +1,17 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 import { EquipmentUsageQueryDto } from './dto/equipment-usage-query.dto';
 import { ExerciseProgressQueryDto } from './dto/exercise-progress-query.dto';
 import { ExercisesSummaryQueryDto } from './dto/exercises-summary-query.dto';
+import { ReportPdfQueryDto } from './dto/report-pdf-query.dto';
 import { TrainersReportQueryDto } from './dto/trainers-report-query.dto';
 import { WeightDynamicsQueryDto } from './dto/weight-dynamics-query.dto';
+import { ReportsPdfService } from './reports-pdf.service';
 import {
   AttendanceResponse,
   EquipmentUsageResponse,
@@ -24,7 +27,10 @@ import {
 @Roles(Role.CLIENT, Role.RECEPTION, Role.TRAINER, Role.ADMIN)
 @Controller('reports')
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly reportsPdfService: ReportsPdfService,
+  ) {}
 
   @Get('weight-dynamics')
   @ApiOperation({ summary: 'Динамика веса и жира' })
@@ -87,5 +93,36 @@ export class ReportsController {
     @Query() query: TrainersReportQueryDto,
   ): Promise<TrainerReportItem[]> {
     return this.reportsService.trainersReport(userId, role, query);
+  }
+
+  @Get('pdf/weight')
+  @ApiOperation({ summary: 'PDF-отчёт по весу' })
+  async weightPdf(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
+    @Query() query: ReportPdfQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdf = await this.reportsPdfService.weightPdf(userId, role, query);
+    this.sendPdf(res, pdf, 'weight-report.pdf');
+  }
+
+  @Get('pdf/exercises')
+  @ApiOperation({ summary: 'PDF-отчёт по выполнению упражнений' })
+  async exercisesPdf(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
+    @Query() query: ReportPdfQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdf = await this.reportsPdfService.exercisesPdf(userId, role, query);
+    this.sendPdf(res, pdf, 'exercises-report.pdf');
+  }
+
+  private sendPdf(res: Response, pdf: Buffer, filename: string): void {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.end(pdf);
   }
 }

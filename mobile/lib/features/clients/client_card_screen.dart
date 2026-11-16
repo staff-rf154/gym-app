@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
 import '../../core/utils/format.dart';
+import '../../core/utils/timezone.dart';
+import '../auth/auth_controller.dart';
 import '../chats/chat_models.dart';
 import '../chats/chat_providers.dart';
 import '../chats/chat_screen.dart';
+import '../client/client_workout_models.dart';
+import '../client/workout_view_screen.dart';
 import '../nutrition/nutrition_tab.dart';
 import '../progress/progress_tab.dart';
 import '../weights/weight_tab.dart';
@@ -68,6 +72,14 @@ class _WorkoutsTab extends ConsumerStatefulWidget {
 
 class _WorkoutsTabState extends ConsumerState<_WorkoutsTab> {
   String _gymId = '';
+  String? _status;
+  WorkoutPeriod _period = WorkoutPeriod.thisWeek;
+
+  Future<void> _openWorkout(ClientWorkout workout) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => WorkoutViewScreen(workout: workout)),
+    );
+  }
 
   Future<void> _createWorkout() async {
     final created = await Navigator.of(context).push<bool>(
@@ -84,10 +96,10 @@ class _WorkoutsTabState extends ConsumerState<_WorkoutsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final workouts = ref.watch(
-      trainerClientWorkoutsProvider(widget.client.id),
-    );
+    final workouts = ref.watch(trainerClientWorkoutsProvider(widget.client.id));
     final gyms = ref.watch(gymsProvider).asData?.value ?? const [];
+    final timezone = ref.watch(authControllerProvider).value?.timezone ?? 'UTC';
+    final now = nowInTimezone(timezone);
 
     return Column(
       children: [
@@ -120,6 +132,50 @@ class _WorkoutsTabState extends ConsumerState<_WorkoutsTab> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: DropdownButtonFormField<WorkoutPeriod>(
+            initialValue: _period,
+            decoration: const InputDecoration(
+              labelText: 'Период',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: [
+              for (final period in WorkoutPeriod.values)
+                DropdownMenuItem(
+                  value: period,
+                  child: Text(workoutPeriodLabel(period)),
+                ),
+            ],
+            onChanged: (value) =>
+                setState(() => _period = value ?? WorkoutPeriod.thisWeek),
+          ),
+        ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(
+            children: [
+              for (final filter in const [
+                (null, 'Все'),
+                ('PLANNED', 'Запланированы'),
+                ('IN_PROGRESS', 'В процессе'),
+                ('COMPLETED', 'Завершены'),
+                ('AUTO_CLOSED', 'Автозакрыты'),
+                ('MISSED', 'Пропущены'),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(filter.$2),
+                    selected: _status == filter.$1,
+                    onSelected: (_) => setState(() => _status = filter.$1),
+                  ),
+                ),
+            ],
+          ),
+        ),
         Expanded(
           child: workouts.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -142,9 +198,20 @@ class _WorkoutsTabState extends ConsumerState<_WorkoutsTab> {
               ),
             ),
             data: (items) {
-              final filtered = _gymId.isEmpty
-                  ? items
-                  : items.where((item) => item.gymId == _gymId).toList();
+              final filtered =
+                  items
+                      .where(
+                        (item) =>
+                            (_gymId.isEmpty || item.gymId == _gymId) &&
+                            (_status == null || item.status == _status) &&
+                            matchesWorkoutPeriod(
+                              item.date,
+                              _period,
+                              now: now,
+                            ),
+                      )
+                      .toList()
+                    ..sort((a, b) => b.date.compareTo(a.date));
               return RefreshIndicator(
                 onRefresh: () async => ref.invalidate(
                   trainerClientWorkoutsProvider(widget.client.id),
@@ -152,9 +219,7 @@ class _WorkoutsTabState extends ConsumerState<_WorkoutsTab> {
                 child: filtered.isEmpty
                     ? ListView(
                         children: const [
-                          ListTile(
-                            title: Text('Тренировок пока нет'),
-                          ),
+                          ListTile(title: Text('Тренировок пока нет')),
                         ],
                       )
                     : ListView.separated(
@@ -172,6 +237,8 @@ class _WorkoutsTabState extends ConsumerState<_WorkoutsTab> {
                                 '${workout.completedItems}/${workout.items.length}',
                               ].join(' · '),
                             ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => _openWorkout(workout),
                           );
                         },
                       ),
@@ -192,7 +259,6 @@ class _ClientSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final details = <String>[
-      client.phone,
       if (client.age != null) '${client.age} лет',
       if (client.height != null) '${formatNumber(client.height!)} см',
       if (client.goal != null && client.goal!.isNotEmpty) client.goal!,
@@ -240,7 +306,7 @@ class _ChatTab extends ConsumerWidget {
     final chats = ref.watch(chatsProvider);
 
     return switch (chats) {
-      AsyncData(:final value) => _buildLoaded(value),
+      AsyncData(:final value) => _buildLoaded(context, ref, value),
       AsyncError() => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -263,7 +329,11 @@ class _ChatTab extends ConsumerWidget {
     };
   }
 
-  Widget _buildLoaded(List<ChatSummary> chats) {
+  Widget _buildLoaded(
+    BuildContext context,
+    WidgetRef ref,
+    List<ChatSummary> chats,
+  ) {
     ChatSummary? chat;
     for (final item in chats) {
       if (item.peerId == client.userId) {
@@ -285,6 +355,12 @@ class _ChatTab extends ConsumerWidget {
                 'Чат с ${client.name} ещё не создан',
                 textAlign: TextAlign.center,
               ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => _startChat(context, ref),
+                icon: const Icon(Icons.add_comment_outlined),
+                label: const Text('Начать чат'),
+              ),
             ],
           ),
         ),
@@ -292,5 +368,27 @@ class _ChatTab extends ConsumerWidget {
     }
 
     return ChatConversation(chat: chat);
+  }
+
+  Future<void> _startChat(BuildContext context, WidgetRef ref) async {
+    try {
+      final chat = await ref.read(chatApiProvider).createChat(
+        type: 'CLIENT_TRAINER',
+        clientId: client.id,
+      );
+      ref.invalidate(chatsProvider);
+      if (!context.mounted) {
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => ChatScreen(chat: chat)),
+      );
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(apiErrorMessage(error))),
+        );
+      }
+    }
   }
 }

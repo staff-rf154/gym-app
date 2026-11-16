@@ -24,6 +24,7 @@ COPY package.json pnpm-lock.yaml* ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/assets ./assets
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/jest.config.js ./jest.config.js
 COPY --from=build /app/src ./src

@@ -81,6 +81,7 @@ export class PushService implements OnModuleInit {
     userIds: string[],
     title: string,
     body: string,
+    data?: Record<string, string>,
   ): Promise<void> {
     if (!this.app || userIds.length === 0) {
       return;
@@ -108,6 +109,7 @@ export class PushService implements OnModuleInit {
         const result = await messaging.sendEachForMulticast({
           tokens: batch,
           notification: { title, body },
+          ...(data ? { data } : {}),
         });
 
         this.logger.log(

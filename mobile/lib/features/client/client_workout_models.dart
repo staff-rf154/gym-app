@@ -70,7 +70,19 @@ class ClientWorkoutItem {
   String get planLabel {
     final weight = plannedWeight == null ? '—' : formatNumber(plannedWeight!);
     final equipment = equipmentName == null ? '' : ' · $equipmentName';
-    return '$weight кг × $plannedReps повт. · $plannedSets подх.$equipment';
+    return 'План: $weight кг × $plannedReps повт. · $plannedSets подх.$equipment';
+  }
+
+  String get factLabel {
+    final result = this.result;
+    if (result == null) {
+      return 'Факт: —';
+    }
+    final weight = result.actualWeight == null
+        ? 'вес по плану'
+        : '${formatNumber(result.actualWeight!)} кг';
+    final reps = result.actualReps == null ? '—' : '${result.actualReps} повт.';
+    return 'Факт: $weight × $reps · ${result.done ? 'выполнено' : 'не выполнено'}';
   }
 }
 
@@ -85,6 +97,9 @@ class ClientWorkout {
     this.trainerId,
     this.clientName,
     this.gymName,
+    this.startTime,
+    this.startedAt,
+    this.autoFinishAt,
     this.comment,
     this.templateId,
   });
@@ -105,13 +120,23 @@ class ClientWorkout {
       trainerId: json['trainerId'] as String?,
       clientName: json['clientName'] as String?,
       gymName: json['gymName'] as String?,
+      startTime: json['startTime'] as String?,
       gymId: json['gymId'] as String,
       date: json['date'] as String,
       status: json['status'] as String? ?? 'PLANNED',
+      startedAt: _parseDate(json['startedAt']),
+      autoFinishAt: _parseDate(json['autoFinishAt']),
       comment: json['comment'] as String?,
       templateId: json['templateId'] as String?,
       items: items,
     );
+  }
+
+  static DateTime? _parseDate(Object? value) {
+    if (value is! String || value.isEmpty) {
+      return null;
+    }
+    return DateTime.tryParse(value)?.toLocal();
   }
 
   final String id;
@@ -119,9 +144,12 @@ class ClientWorkout {
   final String? trainerId;
   final String? clientName;
   final String? gymName;
+  final String? startTime;
   final String gymId;
   final String date;
   final String status;
+  final DateTime? startedAt;
+  final DateTime? autoFinishAt;
   final String? comment;
   final String? templateId;
   final List<ClientWorkoutItem> items;
@@ -130,12 +158,15 @@ class ClientWorkout {
 
   String get statusLabel {
     return switch (status) {
-      'DONE' => 'Выполнена',
+      'COMPLETED' || 'DONE' => 'Завершена',
       'IN_PROGRESS' => 'В процессе',
-      'SKIPPED' => 'Пропущена',
+      'AUTO_CLOSED' => 'Закрыта автоматически',
+      'MISSED' || 'SKIPPED' => 'Пропущена',
       _ => 'Запланирована',
     };
   }
+
+  String get timeLabel => startTime ?? '—';
 
   int get completedItems =>
       items.where((item) => item.result?.done == true).length;
@@ -144,7 +175,53 @@ class ClientWorkout {
 
   bool get isInProgress => status == 'IN_PROGRESS';
 
-  bool get isLocked => status == 'DONE' || status == 'SKIPPED';
+  bool get isTerminal =>
+      status == 'COMPLETED' ||
+      status == 'AUTO_CLOSED' ||
+      status == 'MISSED' ||
+      status == 'DONE' ||
+      status == 'SKIPPED';
+
+  bool get isLocked => isTerminal;
+}
+
+enum WorkoutPeriod { thisWeek, all, thisMonth, previousMonth, lastThreeMonths }
+
+String workoutPeriodLabel(WorkoutPeriod period) {
+  return switch (period) {
+    WorkoutPeriod.thisWeek => 'Текущая неделя',
+    WorkoutPeriod.all => 'Всё время',
+    WorkoutPeriod.thisMonth => 'Этот месяц',
+    WorkoutPeriod.previousMonth => 'Прошлый месяц',
+    WorkoutPeriod.lastThreeMonths => '3 месяца',
+  };
+}
+
+bool matchesWorkoutPeriod(String date, WorkoutPeriod period, {DateTime? now}) {
+  if (period == WorkoutPeriod.all) {
+    return true;
+  }
+  final value = DateTime.tryParse(date);
+  if (value == null) {
+    return false;
+  }
+  final today = now ?? DateTime.now();
+  final dayStart = DateTime(today.year, today.month, today.day);
+  final weekStart = dayStart.subtract(Duration(days: dayStart.weekday - 1));
+  final monthStart = DateTime(today.year, today.month);
+  final from = switch (period) {
+    WorkoutPeriod.thisWeek => weekStart,
+    WorkoutPeriod.thisMonth => monthStart,
+    WorkoutPeriod.previousMonth => DateTime(today.year, today.month - 1),
+    WorkoutPeriod.lastThreeMonths => DateTime(today.year, today.month - 2),
+    WorkoutPeriod.all => DateTime(2020),
+  };
+  final to = switch (period) {
+    WorkoutPeriod.thisWeek => weekStart.add(const Duration(days: 7)),
+    WorkoutPeriod.previousMonth => monthStart,
+    _ => DateTime(today.year, today.month + 1),
+  };
+  return !value.isBefore(from) && value.isBefore(to);
 }
 
 class WorkoutItemResultInput {
@@ -170,4 +247,3 @@ class WorkoutItemResultInput {
     };
   }
 }
-

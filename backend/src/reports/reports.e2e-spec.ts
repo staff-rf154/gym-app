@@ -41,10 +41,34 @@ describe('Reports (e2e)', () => {
     return response.body.access_token as string;
   };
 
+  const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
   const authedGet = (token: string, path: string) =>
     request(app.getHttpServer())
       .get(`${API_PREFIX}${path}`)
       .set('Authorization', `Bearer ${token}`);
+
+  const authedGetPdf = (token: string, path: string) =>
+    request(app.getHttpServer())
+      .get(`${API_PREFIX}${path}`)
+      .set('Authorization', `Bearer ${token}`)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        const stream = res as unknown as { destroy: (error?: Error) => void };
+
+        res.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > MAX_UPLOAD_BYTES) {
+            stream.destroy(new Error('PDF response is too large'));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        res.on('end', () => callback(null, Buffer.concat(chunks)));
+        res.on('error', (error: Error) => callback(error, Buffer.alloc(0)));
+      });
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -415,5 +439,69 @@ describe('Reports (e2e)', () => {
       lastWeight: 30,
       recordsCount: 1,
     });
+  });
+
+  it('GET /reports/pdf/weight клиентом → application/pdf', async () => {
+    const response = await authedGetPdf(
+      clientToken,
+      '/reports/pdf/weight?period=month',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain(
+      'weight-report.pdf',
+    );
+    expect(Buffer.isBuffer(response.body)).toBe(true);
+    expect(response.body.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  it('GET /reports/pdf/weight без period → неделя по умолчанию', async () => {
+    const response = await authedGetPdf(clientToken, '/reports/pdf/weight');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.body.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  it('GET /reports/pdf/exercises тренером с client_id → application/pdf', async () => {
+    const response = await authedGetPdf(
+      trainerToken,
+      `/reports/pdf/exercises?client_id=${clientId}&period=month`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain(
+      'exercises-report.pdf',
+    );
+    expect(response.body.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  it('GET /reports/pdf/weight тренером без client_id → 400', async () => {
+    const response = await authedGetPdf(
+      trainerToken,
+      '/reports/pdf/weight?period=month',
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('GET /reports/pdf/exercises непривязанным тренером → 403', async () => {
+    const response = await authedGetPdf(
+      otherTrainerToken,
+      `/reports/pdf/exercises?client_id=${clientId}&period=month`,
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it('GET /reports/pdf/weight с некорректным period → 400', async () => {
+    const response = await authedGetPdf(
+      clientToken,
+      '/reports/pdf/weight?period=decade',
+    );
+
+    expect(response.status).toBe(400);
   });
 });

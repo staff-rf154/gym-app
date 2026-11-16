@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_controller.dart';
+import '../progress/pdf_export_button.dart';
 import '../progress/progress_tab.dart';
 
 class ClientReportsTab extends ConsumerWidget {
@@ -44,7 +45,17 @@ class _WeightTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(12),
-      children: [WeightChartSection(clientId: clientId)],
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: PdfExportButton(
+            clientId: '',
+            kind: 'weight',
+            label: 'Экспорт PDF',
+          ),
+        ),
+        WeightChartSection(clientId: clientId),
+      ],
     );
   }
 }
@@ -58,7 +69,17 @@ class _ExercisesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(12),
-      children: [ExerciseSummarySection(clientId: clientId)],
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: PdfExportButton(
+            clientId: '',
+            kind: 'exercises',
+            label: 'Экспорт PDF',
+          ),
+        ),
+        ExerciseSummarySection(clientId: clientId),
+      ],
     );
   }
 }

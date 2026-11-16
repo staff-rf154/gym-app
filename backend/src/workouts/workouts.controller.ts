@@ -126,8 +126,9 @@ export class TrainerTemplatesController {
   @ApiOperation({ summary: 'Шаблоны тренировок тренера' })
   findAll(
     @CurrentUser('userId') userId: string,
+    @Query('search') search?: string,
   ): Promise<WorkoutTemplateResponse[]> {
-    return this.workoutsService.findTemplates(userId);
+    return this.workoutsService.findTemplates(userId, search);
   }
 
   @Get(':id')

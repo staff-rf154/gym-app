@@ -1,15 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/push/push_service.dart';
 import '../auth/models.dart';
 import '../chats/chats_screen.dart';
-import '../notifications/notification_providers.dart';
-import '../notifications/notifications_screen.dart';
+import '../notifications/notification_bell.dart';
+import '../notifications/startup_notifications.dart';
 import '../settings/settings_screen.dart';
 import 'client_calendar_tab.dart';
 import 'client_nutrition_tab.dart';
 import 'client_reports_tab.dart';
+import 'client_workouts_tab.dart';
 
 class ClientHomeScreen extends ConsumerStatefulWidget {
   const ClientHomeScreen({super.key, required this.user});
@@ -24,7 +27,13 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
   @override
   void initState() {
     super.initState();
-    initClientPush(ref);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      initClientPush(ref);
+      unawaited(showStartupNotifications(context, ref));
+    });
   }
 
   @override
@@ -34,14 +43,27 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
   }
 
   int _index = 0;
+  final Set<int> _visitedTabs = {0};
 
   static const _titles = [
     'Календарь',
+    'Тренировки',
     'Питание',
     'Отчёты',
     'Чаты',
     'Настройки',
   ];
+
+  Widget _tabAt(int index) {
+    return switch (index) {
+      0 => const ClientCalendarTab(),
+      1 => const ClientWorkoutsTab(),
+      2 => const ClientNutritionTab(),
+      3 => const ClientReportsTab(),
+      4 => const ChatsScreen(embedded: true),
+      _ => const SettingsScreen(embedded: true),
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +71,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
       appBar: AppBar(
         title: Text(_titles[_index]),
         actions: [
-          const _NotificationsBell(),
+          const NotificationBell(),
           if (_index == 0)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -64,22 +86,29 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
       ),
       body: IndexedStack(
         index: _index,
-        children: const [
-          ClientCalendarTab(),
-          ClientNutritionTab(),
-          ClientReportsTab(),
-          ChatsScreen(embedded: true),
-          SettingsScreen(embedded: true),
-        ],
+        children: List.generate(
+          _titles.length,
+          (index) => _visitedTabs.contains(index)
+              ? _tabAt(index)
+              : const SizedBox.shrink(),
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
+        onDestinationSelected: (value) => setState(() {
+          _index = value;
+          _visitedTabs.add(value);
+        }),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
             selectedIcon: Icon(Icons.calendar_month),
             label: 'Календарь',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.fitness_center_outlined),
+            selectedIcon: Icon(Icons.fitness_center),
+            label: 'Трен.',
           ),
           NavigationDestination(
             icon: Icon(Icons.restaurant_outlined),
@@ -99,30 +128,9 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
-            label: 'Настройки',
+            label: 'Ещё',
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _NotificationsBell extends ConsumerWidget {
-  const _NotificationsBell();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final unread = ref.watch(unreadNotificationsProvider);
-
-    return IconButton(
-      tooltip: 'Уведомления',
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
-      ),
-      icon: Badge(
-        isLabelVisible: unread > 0,
-        label: Text('$unread'),
-        child: const Icon(Icons.notifications_outlined),
       ),
     );
   }

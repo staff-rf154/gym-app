@@ -7,7 +7,6 @@ class TrainerClient {
     required this.id,
     required this.userId,
     required this.name,
-    required this.phone,
     this.gender,
     this.height,
     this.age,
@@ -25,7 +24,6 @@ class TrainerClient {
       id: json['id'] as String,
       userId: json['userId'] as String,
       name: json['name'] as String,
-      phone: json['phone'] as String,
       gender: json['gender'] as String?,
       height: (json['height'] as num?)?.toDouble(),
       age: (json['age'] as num?)?.toInt(),
@@ -45,7 +43,6 @@ class TrainerClient {
   final String id;
   final String userId;
   final String name;
-  final String phone;
   final String? gender;
   final double? height;
   final int? age;

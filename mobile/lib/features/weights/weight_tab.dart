@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/widgets/empty_state.dart';
 import '../clients/clients_providers.dart';
 import '../clients/trainer_client.dart';
 import 'weight_measurement.dart';
@@ -150,9 +151,9 @@ class _WeightContent extends StatelessWidget {
               ? RefreshIndicator(
                   onRefresh: onRefresh,
                   child: ListView(
-                    children: const [
-                      SizedBox(height: 120),
-                      Center(child: Text('Замеров пока нет')),
+                    children: [
+                      const SizedBox(height: 40),
+                      const EmptyState(message: 'Замеров пока нет'),
                     ],
                   ),
                 )

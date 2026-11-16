@@ -36,21 +36,32 @@ class WorkoutsApi {
     String? from,
     String? to,
   }) async {
-    final response = await _api.dio.get<Map<String, dynamic>>(
-      '/trainer/workouts',
-      queryParameters: {
-        'limit': 100,
-        if (clientId != null && clientId.isNotEmpty) 'client_id': clientId,
-        if (gymId != null && gymId.isNotEmpty) 'gym_id': gymId,
-        if (from != null && from.isNotEmpty) 'from': from,
-        if (to != null && to.isNotEmpty) 'to': to,
-      },
-    );
-    final items = (response.data?['items'] as List<dynamic>?) ?? const [];
-    return items
-        .cast<Map<String, dynamic>>()
-        .map(ClientWorkout.fromJson)
-        .toList();
+    final workouts = <ClientWorkout>[];
+    var page = 1;
+    while (true) {
+      final response = await _api.dio.get<Map<String, dynamic>>(
+        '/trainer/workouts',
+        queryParameters: {
+          'limit': 100,
+          'page': page,
+          if (clientId != null && clientId.isNotEmpty) 'client_id': clientId,
+          if (gymId != null && gymId.isNotEmpty) 'gym_id': gymId,
+          if (from != null && from.isNotEmpty) 'from': from,
+          if (to != null && to.isNotEmpty) 'to': to,
+        },
+      );
+      final items = (response.data?['items'] as List<dynamic>?) ?? const [];
+      workouts.addAll(
+        items.cast<Map<String, dynamic>>().map(ClientWorkout.fromJson),
+      );
+      final total = (response.data?['total'] as num?)?.toInt();
+      if (items.length < 100 ||
+          (total != null && workouts.length >= total)) {
+        break;
+      }
+      page++;
+    }
+    return workouts;
   }
 
   Future<ClientWorkout> fetchTrainerWorkout(String id) async {
@@ -137,6 +148,7 @@ class WorkoutsApi {
     required List<WorkoutItemInput> items,
     String? templateId,
     String? comment,
+    String? startTime,
   }) async {
     await _api.dio.post<Map<String, dynamic>>(
       '/trainer/workouts',
@@ -144,6 +156,7 @@ class WorkoutsApi {
         'client_id': clientId,
         'gym_id': gymId,
         'date': date,
+        'start_time': ?startTime,
         'template_id': ?templateId,
         if (comment != null && comment.isNotEmpty) 'comment': comment,
         'items': items.map((item) => item.toJson()).toList(),
@@ -159,6 +172,7 @@ class WorkoutsApi {
     required List<WorkoutItemInput> items,
     String? templateId,
     String? comment,
+    String? startTime,
   }) async {
     await _api.dio.put<Map<String, dynamic>>(
       '/trainer/workouts/$id',
@@ -166,6 +180,7 @@ class WorkoutsApi {
         'client_id': clientId,
         'gym_id': gymId,
         'date': date,
+        'start_time': startTime,
         'template_id': templateId,
         'comment': comment == null || comment.isEmpty ? null : comment,
         'items': items.map((item) => item.toJson()).toList(),

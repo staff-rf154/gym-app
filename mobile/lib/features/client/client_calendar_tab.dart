@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/utils/timezone.dart';
+import '../auth/auth_controller.dart';
 import 'client_workout_models.dart';
 import 'client_workouts_providers.dart';
 import 'workout_day_screen.dart';
@@ -54,6 +56,7 @@ class _ClientCalendarTabState extends ConsumerState<ClientCalendarTab> {
   @override
   Widget build(BuildContext context) {
     final workouts = ref.watch(clientMonthWorkoutsProvider(_month));
+    final timezone = ref.watch(authControllerProvider).value?.timezone ?? 'UTC';
 
     return RefreshIndicator(
       onRefresh: () async =>
@@ -74,6 +77,7 @@ class _ClientCalendarTabState extends ConsumerState<ClientCalendarTab> {
             AsyncData(:final value) => _MonthGrid(
               month: _month,
               workouts: value,
+              today: todayKey(timezone),
               onDayTap: (date, dayWorkouts) => _openDay(date, dayWorkouts),
             ),
             AsyncError(:final error) => _ErrorBox(
@@ -173,11 +177,13 @@ class _MonthGrid extends StatelessWidget {
   const _MonthGrid({
     required this.month,
     required this.workouts,
+    required this.today,
     required this.onDayTap,
   });
 
   final MonthKey month;
   final List<ClientWorkout> workouts;
+  final String today;
   final void Function(DateTime date, List<ClientWorkout> workouts) onDayTap;
 
   @override
@@ -191,7 +197,6 @@ class _MonthGrid extends StatelessWidget {
     final leading = firstWeekday - 1;
     final daysInMonth = month.lastDay.day;
     final totalCells = ((leading + daysInMonth) / 7).ceil() * 7;
-    final today = DateTime.now();
 
     return GridView.builder(
       shrinkWrap: true,
@@ -210,10 +215,7 @@ class _MonthGrid extends StatelessWidget {
         final date = DateTime(month.year, month.month, dayNumber);
         final dateKey = _dateKey(date);
         final dayWorkouts = byDate[dateKey] ?? const [];
-        final isToday =
-            today.year == date.year &&
-            today.month == date.month &&
-            today.day == date.day;
+        final isToday = _dateKey(date) == today;
 
         return _DayCell(
           day: dayNumber,

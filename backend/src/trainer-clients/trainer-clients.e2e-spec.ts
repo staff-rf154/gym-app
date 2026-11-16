@@ -280,6 +280,21 @@ describe('Trainer clients (e2e)', () => {
     expect(ids).not.toContain(otherTrainerClientId);
   });
 
+  it('GET /trainer/clients не раскрывает телефон клиента', async () => {
+    const response = await getClients(trainerToken);
+
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBeGreaterThan(0);
+
+    for (const client of response.body as Record<string, unknown>[]) {
+      expect(client).not.toHaveProperty('phone');
+      expect(client).not.toHaveProperty('user');
+    }
+
+    expect(JSON.stringify(response.body)).not.toContain(CLIENT_PHONE);
+    expect(JSON.stringify(response.body)).not.toContain(SECOND_CLIENT_PHONE);
+  });
+
   it('GET /trainer/clients содержит age, currentWeight, currentFatMass', async () => {
     const response = await getClients(trainerToken);
     const first = response.body.find(

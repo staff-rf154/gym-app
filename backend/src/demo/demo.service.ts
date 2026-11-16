@@ -37,6 +37,11 @@ interface DemoTrainerSpec {
   gymIndex: number;
 }
 
+interface DemoReceptionSpec {
+  name: string;
+  gymIndex: number;
+}
+
 interface DemoClientSpec {
   name: string;
   gender: Gender;
@@ -72,6 +77,7 @@ export interface DemoStatus {
   gyms: number;
   trainers: number;
   clients: number;
+  receptions: number;
   workouts: number;
 }
 
@@ -91,6 +97,7 @@ export interface DemoClearResult {
   gyms: number;
   trainers: number;
   clients: number;
+  receptions: number;
   workouts: number;
 }
 
@@ -289,6 +296,12 @@ const DEMO_GYMS: DemoGymSpec[] = [
   },
 ];
 
+const DEMO_RECEPTIONS: DemoReceptionSpec[] = [
+  { name: 'Ирина Белова', gymIndex: 0 },
+  { name: 'Светлана Гусева', gymIndex: 1 },
+  { name: 'Татьяна Крылова', gymIndex: 2 },
+];
+
 const DEMO_TRAINERS: DemoTrainerSpec[] = [
   { name: 'Анна Смирнова', gymIndex: 0 },
   { name: 'Игорь Волков', gymIndex: 0 },
@@ -419,30 +432,42 @@ export class DemoService {
   ) {}
 
   async status(): Promise<DemoStatus> {
-    const [gyms, trainers, clients, workouts] = await this.prisma.$transaction([
-      this.prisma.gym.count({
-        where: { name: { startsWith: DEMO_GYM_PREFIX } },
-      }),
-      this.prisma.trainer.count({
-        where: {
-          user: { phone: { startsWith: DEMO_PHONE_PREFIX } },
-        },
-      }),
-      this.prisma.client.count({
-        where: {
-          user: { phone: { startsWith: DEMO_PHONE_PREFIX } },
-        },
-      }),
-      this.prisma.workout.count({
-        where: { gym: { name: { startsWith: DEMO_GYM_PREFIX } } },
-      }),
-    ]);
+    const [gyms, trainers, clients, receptions, workouts] = await this.prisma
+      .$transaction([
+        this.prisma.gym.count({
+          where: { name: { startsWith: DEMO_GYM_PREFIX } },
+        }),
+        this.prisma.trainer.count({
+          where: {
+            user: { phone: { startsWith: DEMO_PHONE_PREFIX } },
+          },
+        }),
+        this.prisma.client.count({
+          where: {
+            user: { phone: { startsWith: DEMO_PHONE_PREFIX } },
+          },
+        }),
+        this.prisma.reception.count({
+          where: {
+            user: { phone: { startsWith: DEMO_PHONE_PREFIX } },
+          },
+        }),
+        this.prisma.workout.count({
+          where: { gym: { name: { startsWith: DEMO_GYM_PREFIX } } },
+        }),
+      ]);
 
     return {
-      loaded: gyms > 0 || trainers > 0 || clients > 0 || workouts > 0,
+      loaded:
+        gyms > 0 ||
+        trainers > 0 ||
+        clients > 0 ||
+        receptions > 0 ||
+        workouts > 0,
       gyms,
       trainers,
       clients,
+      receptions,
       workouts,
     };
   }
@@ -520,6 +545,10 @@ export class DemoService {
       (_, index) =>
         `${DEMO_PHONE_PREFIX}01${String(index + 1).padStart(2, '0')}`,
     );
+    const receptionUserIds = DEMO_RECEPTIONS.map(
+      (_, index) =>
+        `${DEMO_PHONE_PREFIX}02${String(index + 1).padStart(2, '0')}`,
+    );
 
     const usersData = [
       ...DEMO_TRAINERS.map((trainer, index) => ({
@@ -535,6 +564,13 @@ export class DemoService {
         passwordHash,
         role: Role.CLIENT,
         name: `Демо-клиент ${client.name}`,
+      })),
+      ...DEMO_RECEPTIONS.map((reception, index) => ({
+        id: randomUUID(),
+        phone: receptionUserIds[index],
+        passwordHash,
+        role: Role.RECEPTION,
+        name: `Демо-ресепшен ${reception.name}`,
       })),
     ];
     await this.prisma.user.createMany({ data: usersData });
@@ -588,6 +624,14 @@ export class DemoService {
         isActive: true,
       })),
     });
+
+    const receptionRows = DEMO_RECEPTIONS.map((reception, index) => ({
+      id: randomUUID(),
+      userId:
+        usersData[DEMO_TRAINERS.length + DEMO_CLIENTS.length + index].id,
+      gymId: gymIds[reception.gymIndex],
+    }));
+    await this.prisma.reception.createMany({ data: receptionRows });
 
     const clientsWithTrainer = clientRows.map((client, index) => {
       const trainerIndex =
@@ -732,7 +776,7 @@ export class DemoService {
       sessions.forEach((session, sessionIndex) => {
         const workoutId = randomUUID();
         const isMissed = random() < 0.08;
-        const status = isMissed ? WorkoutStatus.SKIPPED : WorkoutStatus.DONE;
+        const status = isMissed ? WorkoutStatus.MISSED : WorkoutStatus.COMPLETED;
         const itemCount = 4 + (random() < 0.5 ? 1 : 0) + (random() < 0.2 ? 1 : 0);
         const items = this.pickItems(
           exercises,
@@ -772,7 +816,7 @@ export class DemoService {
             order: itemIndex + 1,
           });
 
-          if (status === WorkoutStatus.DONE) {
+          if (status === WorkoutStatus.COMPLETED) {
             const isCardio = exercise?.type === ExerciseType.CARDIO;
             resultRows.push({
               id: randomUUID(),
@@ -931,6 +975,7 @@ export class DemoService {
       gyms: gymsData.length,
       trainers: trainerRows.length,
       clients: clientRows.length,
+      receptions: receptionRows.length,
       workouts: workoutRows.length,
       equipment: equipmentRows.length,
       exercises: exercises.length,
@@ -1107,6 +1152,7 @@ export class DemoService {
       gyms: before.gyms,
       trainers: before.trainers,
       clients: before.clients,
+      receptions: before.receptions,
       workouts: before.workouts,
     };
   }

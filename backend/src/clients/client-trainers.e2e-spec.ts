@@ -343,7 +343,7 @@ describe('Clients, Trainers and links (e2e)', () => {
   });
 
   it('GET /admin/clients отдаёт active_trainers с именами', async () => {
-    const response = await authed(adminToken).get('/admin/clients');
+    const response = await authed(adminToken).get('/admin/clients?limit=100');
 
     expect(response.status).toBe(200);
     const client = response.body.items.find(
@@ -373,7 +373,7 @@ describe('Clients, Trainers and links (e2e)', () => {
     });
     expect(link?.isActive).toBe(false);
 
-    const list = await authed(adminToken).get('/admin/clients');
+    const list = await authed(adminToken).get('/admin/clients?limit=100');
     const client = list.body.items.find(
       (item: { id: string }) => item.id === clientId,
     );

@@ -91,9 +91,26 @@ class _ClientNutritionTabState extends ConsumerState<ClientNutritionTab> {
                       ),
                     )
                   : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final item in value)
-                          _ClientRecommendationCard(recommendation: item),
+                        if (value.any((item) => item.isActive)) ...[
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(4, 0, 4, 6),
+                            child: Text('Активные'),
+                          ),
+                          for (final item
+                              in value.where((item) => item.isActive))
+                            _ClientRecommendationCard(recommendation: item),
+                        ],
+                        if (value.any((item) => !item.isActive)) ...[
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(4, 12, 4, 6),
+                            child: Text('Архив'),
+                          ),
+                          for (final item
+                              in value.where((item) => !item.isActive))
+                            _ClientRecommendationCard(recommendation: item),
+                        ],
                       ],
                     ),
             AsyncError(:final error) => Card(
@@ -135,6 +152,9 @@ class _ClientRecommendationCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: recommendation.isActive
+          ? null
+          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

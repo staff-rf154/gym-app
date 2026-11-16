@@ -18,6 +18,12 @@ const CLIENT_A_PHONE = '+79990000803';
 const CLIENT_B_PHONE = '+79990000804';
 const CLIENT_C_PHONE = '+79990000805';
 const TEST_PASSWORD = 'TestPass123!';
+
+const futureDate = () => {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+};
 const PHONES = [
   TRAINER_PHONE,
   OTHER_TRAINER_PHONE,
@@ -97,7 +103,7 @@ describe('Workout lock (e2e)', () => {
         clientId,
         trainerId: ownerTrainerId,
         gymId,
-        date: new Date('2026-11-12T00:00:00.000Z'),
+        date: new Date(`${futureDate()}T00:00:00.000Z`),
         status,
         items: {
           create: [
@@ -368,13 +374,13 @@ describe('Workout lock (e2e)', () => {
     });
   });
 
-  it('после finish статус DONE, повторный PUT result — 409', async () => {
+  it('после finish статус COMPLETED, повторный PUT result — 409', async () => {
     const workout = await createWorkout(clientAId, trainerId);
     await start(clientAToken, 'client', workout.id);
     const finished = await finish(clientAToken, 'client', workout.id);
 
     expect(finished.status).toBe(200);
-    expect(finished.body.status).toBe(WorkoutStatus.DONE);
+    expect(finished.body.status).toBe(WorkoutStatus.COMPLETED);
 
     const response = await putResult(
       clientAToken,
@@ -414,7 +420,7 @@ describe('Workout lock (e2e)', () => {
     expect(foreignFinish.status).toBe(403);
   });
 
-  it('тренер не может изменить тренировку в статусе DONE (409)', async () => {
+  it('тренер не может изменить тренировку в статусе COMPLETED (409)', async () => {
     const workout = await createWorkout(clientAId, trainerId);
     await start(clientAToken, 'client', workout.id);
     await finish(clientAToken, 'client', workout.id);
@@ -422,7 +428,7 @@ describe('Workout lock (e2e)', () => {
     const response = await updateWorkout(trainerToken, workout.id, {
       client_id: clientAId,
       gym_id: gymId,
-      date: '2026-11-12',
+      date: futureDate(),
       items: [
         {
           exerciseId,
@@ -438,11 +444,11 @@ describe('Workout lock (e2e)', () => {
     expect(response.status).toBe(409);
   });
 
-  it('SKIPPED также блокирует изменение результатов', async () => {
+  it('MISSED также блокирует изменение результатов', async () => {
     const workout = await createWorkout(
       clientAId,
       trainerId,
-      WorkoutStatus.SKIPPED,
+      WorkoutStatus.MISSED,
     );
 
     const clientResponse = await putResult(
@@ -462,19 +468,15 @@ describe('Workout lock (e2e)', () => {
     expect(trainerResponse.status).toBe(409);
   });
 
-  it('тренер и клиент стартуют одну тренировку: один успешен, второй — 409', async () => {
+  it('тренер не может начать тренировку, клиент начинает успешно', async () => {
     const workout = await createWorkout(clientBId, trainerId);
 
-    const responses = await Promise.all([
-      start(trainerToken, 'trainer', workout.id),
-      start(clientBToken, 'client', workout.id),
-    ]);
-    const statuses = responses.map((response) => response.status).sort();
+    const trainerStart = await start(trainerToken, 'trainer', workout.id);
+    expect(trainerStart.status).toBe(403);
 
-    expect(statuses).toEqual([200, 409]);
-
-    const current = await getWorkout(clientBToken, 'client', workout.id);
-    expect(current.body.status).toBe(WorkoutStatus.IN_PROGRESS);
+    const clientStart = await start(clientBToken, 'client', workout.id);
+    expect(clientStart.status).toBe(200);
+    expect(clientStart.body.status).toBe(WorkoutStatus.IN_PROGRESS);
   });
 
   it('тренер не может начать/завершить тренировку чужого клиента (403)', async () => {
@@ -483,19 +485,19 @@ describe('Workout lock (e2e)', () => {
     const foreignStart = await start(otherTrainerToken, 'trainer', workout.id);
     expect(foreignStart.status).toBe(403);
 
-    await start(trainerToken, 'trainer', workout.id);
+    await start(clientAToken, 'client', workout.id);
 
     const foreignFinish = await finish(otherTrainerToken, 'trainer', workout.id);
     expect(foreignFinish.status).toBe(403);
   });
 
-  it('тренер ведёт две тренировки разных клиентов одновременно', async () => {
+  it('клиент ведёт две тренировки, тренер фиксирует результаты', async () => {
     const workoutA = await createWorkout(clientAId, trainerId);
     const workoutB = await createWorkout(clientBId, trainerId);
 
     const [startA, startB] = await Promise.all([
-      start(trainerToken, 'trainer', workoutA.id),
-      start(trainerToken, 'trainer', workoutB.id),
+      start(clientAToken, 'client', workoutA.id),
+      start(clientBToken, 'client', workoutB.id),
     ]);
 
     expect(startA.status).toBe(200);
@@ -533,7 +535,7 @@ describe('Workout lock (e2e)', () => {
 
   it('тренер записывает результат, после finish получает 409', async () => {
     const workout = await createWorkout(clientBId, trainerId);
-    await start(trainerToken, 'trainer', workout.id);
+    await start(clientBToken, 'client', workout.id);
 
     const saved = await putResult(
       trainerToken,
@@ -545,7 +547,7 @@ describe('Workout lock (e2e)', () => {
 
     const finished = await finish(trainerToken, 'trainer', workout.id);
     expect(finished.status).toBe(200);
-    expect(finished.body.status).toBe(WorkoutStatus.DONE);
+    expect(finished.body.status).toBe(WorkoutStatus.COMPLETED);
 
     const locked = await putResult(
       trainerToken,
@@ -556,13 +558,14 @@ describe('Workout lock (e2e)', () => {
     expect(locked.status).toBe(409);
   });
 
-  it('клиент видит тренировку, начатую тренером, в статусе IN_PROGRESS', async () => {
+  it('тренер не может начать тренировку, клиент видит её в PLANNED', async () => {
     const workout = await createWorkout(clientAId, trainerId);
-    await start(trainerToken, 'trainer', workout.id);
+
+    const trainerStart = await start(trainerToken, 'trainer', workout.id);
+    expect(trainerStart.status).toBe(403);
 
     const response = await getWorkout(clientAToken, 'client', workout.id);
-
     expect(response.status).toBe(200);
-    expect(response.body.status).toBe(WorkoutStatus.IN_PROGRESS);
+    expect(response.body.status).toBe(WorkoutStatus.PLANNED);
   });
 });

@@ -8,6 +8,7 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.(t|j)s'],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
+  setupFilesAfterEnv: ['<rootDir>/test/setup-e2e.ts'],
   moduleNameMapper: {
     '^src/(.*)$': '<rootDir>/src/$1',
   },

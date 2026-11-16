@@ -20,6 +20,34 @@ class ChatApi {
         .toList();
   }
 
+  Future<ChatSummary> createChat({
+    required String type,
+    String? clientId,
+    String? trainerId,
+  }) async {
+    final response = await _apiClient.dio.post<Map<String, dynamic>>(
+      '/chats',
+      data: {
+        'type': type,
+        if (clientId != null && clientId.isNotEmpty) 'client_id': clientId,
+        if (trainerId != null && trainerId.isNotEmpty) 'trainer_id': trainerId,
+      },
+    );
+    return ChatSummary.fromJson(response.data!);
+  }
+
+  Future<List<ClientTrainerOption>> fetchClientTrainers() async {
+    final response = await _apiClient.dio.get<List<dynamic>>('/client/trainers');
+    return (response.data ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(ClientTrainerOption.fromJson)
+        .toList();
+  }
+
+  Future<void> markRead(String chatId) async {
+    await _apiClient.dio.post<void>('/chats/$chatId/read');
+  }
+
   Future<List<ChatMessage>> fetchMessages(
     String chatId, {
     int limit = 50,

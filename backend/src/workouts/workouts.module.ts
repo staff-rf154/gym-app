@@ -9,8 +9,10 @@ import {
   TrainerWorkoutsController,
 } from './workouts.controller';
 import { WorkoutsService } from './workouts.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [
     AdminTemplatesController,
     ReceptionTemplatesController,

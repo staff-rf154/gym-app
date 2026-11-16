@@ -9,6 +9,7 @@ import '../../features/notifications/notification_providers.dart';
 
 StreamSubscription<RemoteMessage>? _messageSubscription;
 StreamSubscription<String>? _tokenSubscription;
+bool _clientPushStarted = false;
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -18,6 +19,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 Future<void> initClientPush(WidgetRef ref) async {
+  if (_clientPushStarted) {
+    return;
+  }
+  _clientPushStarted = true;
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp();
@@ -46,6 +51,7 @@ Future<void> initClientPush(WidgetRef ref) async {
       } catch (_) {}
     });
   } catch (error) {
+    _clientPushStarted = false;
     debugPrint('FCM недоступен: $error');
   }
 }
@@ -55,4 +61,5 @@ Future<void> disposeClientPush() async {
   await _tokenSubscription?.cancel();
   _messageSubscription = null;
   _tokenSubscription = null;
+  _clientPushStarted = false;
 }

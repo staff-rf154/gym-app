@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
 import 'exercise_progress_screen.dart';
+import 'pdf_export_button.dart';
 import 'report_models.dart';
 import 'reports_providers.dart';
 
@@ -20,6 +21,23 @@ class ProgressTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            PdfExportButton(
+              clientId: clientId,
+              kind: 'weight',
+              label: 'PDF: вес',
+            ),
+            PdfExportButton(
+              clientId: clientId,
+              kind: 'exercises',
+              label: 'PDF: упражнения',
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         WeightChartSection(clientId: clientId),
         const SizedBox(height: 12),
         ExerciseSummarySection(clientId: clientId),

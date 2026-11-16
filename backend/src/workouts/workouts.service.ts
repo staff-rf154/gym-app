@@ -3,9 +3,13 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import {
+  NotificationType,
   Prisma,
   WorkoutStatus,
 } from '@prisma/client';
@@ -13,6 +17,12 @@ import {
   PaginatedResponse,
 } from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import {
+  dateStringInTimezone,
+  minutesOfDayInTimezone,
+  parseStartTime,
+} from '../common/timezone';
 import { ClientWorkoutsQueryDto } from './dto/client-workouts-query.dto';
 import { TrainerWorkoutsQueryDto } from './dto/trainer-workouts-query.dto';
 import { CreateAdminWorkoutTemplateDto } from './dto/create-admin-workout-template.dto';
@@ -48,6 +58,9 @@ type TemplateEntity = Prisma.WorkoutTemplateGetPayload<{
   include: typeof templateInclude;
 }>;
 
+const AUTO_FINISH_MS = 2 * 60 * 60 * 1000;
+const AUTO_FINISH_CHECK_INTERVAL_MS = 60 * 1000;
+
 export interface WorkoutItemResponse {
   id: string;
   exercise: unknown;
@@ -67,7 +80,10 @@ export interface WorkoutResponse {
   gymId: string;
   gymName: string;
   date: string;
+  startTime: string | null;
   status: WorkoutStatus;
+  startedAt: string | null;
+  autoFinishAt: string | null;
   comment: string | null;
   templateId: string | null;
   items: WorkoutItemResponse[];
@@ -105,15 +121,206 @@ function itemData(item: WorkoutTemplateItemDto) {
 }
 
 @Injectable()
-export class WorkoutsService {
-  constructor(private readonly prisma: PrismaService) {}
+export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(WorkoutsService.name);
+  private autoFinishTimer?: NodeJS.Timeout;
 
-  async findTemplates(userId: string): Promise<WorkoutTemplateResponse[]> {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
+
+  onModuleInit(): void {
+    this.autoFinishTimer = setInterval(() => {
+      void this.runAutomation().catch((error) => {
+        this.logger.error(
+          'Failed to run workout automation',
+          error instanceof Error ? error.stack : String(error),
+        );
+      });
+    }, AUTO_FINISH_CHECK_INTERVAL_MS);
+    this.autoFinishTimer.unref?.();
+
+    void this.runAutomation().catch((error) => {
+      this.logger.error(
+        'Failed to run workout automation on startup',
+        error instanceof Error ? error.stack : String(error),
+      );
+    });
+  }
+
+  private async runAutomation(): Promise<void> {
+    await this.closeExpiredWorkouts();
+    await this.closeMissedWorkouts();
+    await this.sendWorkoutReminders();
+  }
+
+  onModuleDestroy(): void {
+    if (this.autoFinishTimer) {
+      clearInterval(this.autoFinishTimer);
+      this.autoFinishTimer = undefined;
+    }
+  }
+
+  async closeExpiredWorkouts(now: Date = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - AUTO_FINISH_MS);
+    const expired = await this.prisma.workout.findMany({
+      where: {
+        status: WorkoutStatus.IN_PROGRESS,
+        startedAt: { not: null, lte: cutoff },
+      },
+      select: {
+        id: true,
+        gymId: true,
+        date: true,
+        client: { select: { userId: true } },
+        trainer: { select: { userId: true } },
+      },
+    });
+
+    if (expired.length === 0) {
+      return 0;
+    }
+
+    const updated = await this.prisma.workout.updateMany({
+      where: { id: { in: expired.map((workout) => workout.id) } },
+      data: { status: WorkoutStatus.AUTO_CLOSED },
+    });
+
+    for (const workout of expired) {
+      void this.notificationsService.createEvent({
+        recipientIds: [workout.client.userId, workout.trainer.userId],
+        senderId: workout.trainer.userId,
+        type: NotificationType.WORKOUT,
+        entityId: workout.id,
+        gymId: workout.gymId,
+        title: 'Тренировка закрыта автоматически',
+        body: `Тренировка ${workout.date.toISOString().slice(0, 10)} закрыта: прошло 2 часа. Факт равен плану.`,
+      });
+    }
+
+    return updated.count;
+  }
+
+  async closeMissedWorkouts(now: Date = new Date()): Promise<number> {
+    const planned = await this.prisma.workout.findMany({
+      where: { status: WorkoutStatus.PLANNED },
+      select: {
+        id: true,
+        gymId: true,
+        date: true,
+        client: { select: { userId: true, user: { select: { timezone: true } } } },
+      },
+    });
+
+    const missed = planned.filter(
+      (workout) =>
+        workout.date.toISOString().slice(0, 10) <
+        dateStringInTimezone(now, workout.client.user.timezone),
+    );
+
+    if (missed.length === 0) {
+      return 0;
+    }
+
+    const updated = await this.prisma.workout.updateMany({
+      where: { id: { in: missed.map((workout) => workout.id) } },
+      data: { status: WorkoutStatus.MISSED },
+    });
+
+    for (const workout of missed) {
+      void this.notificationsService.createEvent({
+        recipientIds: [workout.client.userId],
+        senderId: workout.client.userId,
+        type: NotificationType.WORKOUT,
+        entityId: workout.id,
+        gymId: workout.gymId,
+        title: 'Тренировка пропущена',
+        body: `Тренировка ${workout.date.toISOString().slice(0, 10)} не была начата и отмечена как пропущенная.`,
+      });
+    }
+
+    return updated.count;
+  }
+
+  async sendWorkoutReminders(now: Date = new Date()): Promise<number> {
+    const planned = await this.prisma.workout.findMany({
+      where: {
+        status: WorkoutStatus.PLANNED,
+        startTime: { not: null },
+        reminderSentAt: null,
+      },
+      select: {
+        id: true,
+        gymId: true,
+        date: true,
+        startTime: true,
+        client: {
+          select: { userId: true, user: { select: { timezone: true } } },
+        },
+      },
+    });
+
+    let sent = 0;
+
+    for (const workout of planned) {
+      if (!workout.startTime) {
+        continue;
+      }
+
+      const timezone = workout.client.user.timezone;
+      const today = dateStringInTimezone(now, timezone);
+
+      if (workout.date.toISOString().slice(0, 10) !== today) {
+        continue;
+      }
+
+      const nowMinutes = minutesOfDayInTimezone(now, timezone);
+      const startMinutes = parseStartTime(workout.startTime);
+      const minutesLeft = startMinutes - nowMinutes;
+
+      if (minutesLeft <= 0 || minutesLeft > 60) {
+        continue;
+      }
+
+      const updated = await this.prisma.workout.updateMany({
+        where: { id: workout.id, reminderSentAt: null },
+        data: { reminderSentAt: now },
+      });
+
+      if (updated.count === 0) {
+        continue;
+      }
+
+      sent += 1;
+      void this.notificationsService.createEvent({
+        recipientIds: [workout.client.userId],
+        senderId: workout.client.userId,
+        type: NotificationType.WORKOUT,
+        entityId: workout.id,
+        gymId: workout.gymId,
+        title: 'Напоминание о тренировке',
+        body: `Тренировка начнётся через ${minutesLeft} мин (${workout.startTime}).`,
+      });
+    }
+
+    return sent;
+  }
+
+  async findTemplates(
+    userId: string,
+    search?: string,
+  ): Promise<WorkoutTemplateResponse[]> {
     const trainer = await this.getTrainer(userId);
     const gymIds = await this.activeGymIds(trainer.id);
 
     const templates = await this.prisma.workoutTemplate.findMany({
-      where: this.trainerTemplateWhere(trainer.id, gymIds),
+      where: {
+        ...this.trainerTemplateWhere(trainer.id, gymIds),
+        ...(search
+          ? { name: { contains: search, mode: 'insensitive' as const } }
+          : {}),
+      },
       include: templateInclude,
       orderBy: { createdAt: 'asc' },
     });
@@ -139,6 +346,16 @@ export class WorkoutsService {
   ): Promise<WorkoutTemplateResponse> {
     const trainer = await this.getTrainer(userId);
     await this.assertItems(dto.items, undefined, trainer.id);
+
+    const personalCount = await this.prisma.workoutTemplate.count({
+      where: { trainerId: trainer.id, isActive: true },
+    });
+
+    if (personalCount >= 10) {
+      throw new ConflictException(
+        'Достигнут лимит 10 личных шаблонов. Удалите шаблон в архив.',
+      );
+    }
 
     const template = await this.prisma.workoutTemplate.create({
       data: {
@@ -195,7 +412,7 @@ export class WorkoutsService {
 
   async findAdminTemplates(): Promise<WorkoutTemplateResponse[]> {
     const templates = await this.prisma.workoutTemplate.findMany({
-      where: { isActive: true },
+      where: { isActive: true, trainerId: null },
       include: templateInclude,
       orderBy: [{ gymId: 'asc' }, { createdAt: 'asc' }],
     });
@@ -231,7 +448,7 @@ export class WorkoutsService {
     id: string,
     dto: UpdateAdminWorkoutTemplateDto,
   ): Promise<WorkoutTemplateResponse> {
-    const template = await this.findActiveTemplateEntity(id);
+    const template = await this.findAdminTemplateEntity(id);
 
     if (dto.gym_id) {
       await this.assertGym(dto.gym_id);
@@ -265,7 +482,7 @@ export class WorkoutsService {
   }
 
   async removeAdminTemplate(id: string): Promise<void> {
-    await this.findActiveTemplateEntity(id);
+    await this.findAdminTemplateEntity(id);
 
     await this.prisma.workoutTemplate.update({
       where: { id },
@@ -358,6 +575,10 @@ export class WorkoutsService {
     await this.assertActiveLink(trainer.id, dto.client_id, dto.gym_id);
     await this.assertGym(dto.gym_id);
     await this.assertItems(dto.items, dto.gym_id);
+    const clientUserId = await this.assertAssignableDate(
+      dto.date,
+      dto.client_id,
+    );
 
     if (dto.template_id) {
       await this.assertTemplateAccessible(trainer.id, dto.template_id);
@@ -369,12 +590,23 @@ export class WorkoutsService {
         trainerId: trainer.id,
         gymId: dto.gym_id,
         date: parseDate(dto.date),
+        startTime: dto.start_time ?? null,
         status: WorkoutStatus.PLANNED,
         comment: dto.comment,
         templateId: dto.template_id,
         items: { create: dto.items.map((item) => itemData(item)) },
       },
       include: workoutInclude,
+    });
+
+    void this.notificationsService.createEvent({
+      recipientIds: [clientUserId],
+      senderId: trainer.userId,
+      type: NotificationType.WORKOUT,
+      entityId: workout.id,
+      gymId: dto.gym_id,
+      title: 'Назначена тренировка',
+      body: `Тренировка на ${dto.date}${dto.start_time ? ` в ${dto.start_time}` : ''}.`,
     });
 
     return this.toWorkoutResponse(workout);
@@ -409,6 +641,7 @@ export class WorkoutsService {
     await this.assertActiveLink(trainer.id, dto.client_id, dto.gym_id);
     await this.assertGym(dto.gym_id);
     await this.assertItems(dto.items, dto.gym_id);
+    await this.assertAssignableDate(dto.date, dto.client_id);
 
     if (dto.template_id) {
       await this.assertTemplateAccessible(trainer.id, dto.template_id);
@@ -425,6 +658,7 @@ export class WorkoutsService {
           clientId: dto.client_id,
           gymId: dto.gym_id,
           date: parseDate(dto.date),
+          startTime: dto.start_time ?? null,
           comment: dto.comment,
           templateId: dto.template_id ?? null,
         },
@@ -549,7 +783,13 @@ export class WorkoutsService {
     const client = await this.getClient(userId);
     const workout = await this.prisma.workout.findUnique({
       where: { id },
-      select: { id: true, clientId: true, status: true },
+      select: {
+        id: true,
+        clientId: true,
+        date: true,
+        status: true,
+        client: { select: { user: { select: { timezone: true } } } },
+      },
     });
 
     if (!workout) {
@@ -568,13 +808,22 @@ export class WorkoutsService {
       );
     }
 
+    const today = dateStringInTimezone(
+      new Date(),
+      workout.client.user.timezone,
+    );
+
+    if (workout.date.toISOString().slice(0, 10) < today) {
+      throw new ConflictException('Пропущенную тренировку начать нельзя');
+    }
+
     const updated = await this.prisma.workout.updateMany({
       where: {
         id,
         clientId: client.id,
         status: WorkoutStatus.PLANNED,
       },
-      data: { status: WorkoutStatus.IN_PROGRESS },
+      data: { status: WorkoutStatus.IN_PROGRESS, startedAt: new Date() },
     });
 
     if (updated.count === 0) {
@@ -613,7 +862,7 @@ export class WorkoutsService {
         clientId: client.id,
         status: WorkoutStatus.IN_PROGRESS,
       },
-      data: { status: WorkoutStatus.DONE },
+      data: { status: WorkoutStatus.COMPLETED },
     });
 
     if (updated.count === 0) {
@@ -627,26 +876,9 @@ export class WorkoutsService {
     userId: string,
     id: string,
   ): Promise<WorkoutResponse> {
-    const trainer = await this.getTrainer(userId);
-    const workout = await this.findTrainerWorkoutForTransition(trainer.id, id);
-    await this.assertActiveLink(trainer.id, workout.clientId, workout.gymId);
-
-    if (workout.status !== WorkoutStatus.PLANNED) {
-      throw new ConflictException(
-        workout.status === WorkoutStatus.IN_PROGRESS
-          ? 'Тренировка уже начата'
-          : 'Завершённую тренировку нельзя начать',
-      );
-    }
-
-    await this.transitionWorkout(
-      { id, trainerId: trainer.id },
-      WorkoutStatus.PLANNED,
-      WorkoutStatus.IN_PROGRESS,
-      'Тренировка уже начата',
-    );
-
-    return this.findOneWorkoutResponse(id);
+    void userId;
+    void id;
+    throw new ForbiddenException('Тренировку начинает клиент');
   }
 
   async trainerFinishWorkout(
@@ -668,9 +900,31 @@ export class WorkoutsService {
     await this.transitionWorkout(
       { id, trainerId: trainer.id },
       WorkoutStatus.IN_PROGRESS,
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       'Тренировка уже завершена',
     );
+
+    const completed = await this.prisma.workout.findUnique({
+      where: { id },
+      select: {
+        gymId: true,
+        date: true,
+        client: { select: { userId: true } },
+        trainer: { select: { userId: true } },
+      },
+    });
+
+    if (completed) {
+      void this.notificationsService.createEvent({
+        recipientIds: [completed.client.userId],
+        senderId: completed.trainer.userId,
+        type: NotificationType.WORKOUT,
+        entityId: id,
+        gymId: completed.gymId,
+        title: 'Тренировка завершена тренером',
+        body: `Тренер завершил тренировку ${completed.date.toISOString().slice(0, 10)}. Факт зафиксирован.`,
+      });
+    }
 
     return this.findOneWorkoutResponse(id);
   }
@@ -760,10 +1014,11 @@ export class WorkoutsService {
     expected: WorkoutStatus,
     next: WorkoutStatus,
     conflictMessage: string,
+    data: Prisma.WorkoutUpdateManyMutationInput = {},
   ): Promise<void> {
     const updated = await this.prisma.workout.updateMany({
       where: { ...where, status: expected },
-      data: { status: next },
+      data: { ...data, status: next },
     });
 
     if (updated.count === 0) {
@@ -777,13 +1032,38 @@ export class WorkoutsService {
     }
 
     if (
-      status === WorkoutStatus.DONE ||
-      status === WorkoutStatus.SKIPPED
+      status === WorkoutStatus.COMPLETED ||
+      status === WorkoutStatus.AUTO_CLOSED ||
+      status === WorkoutStatus.MISSED
     ) {
       throw new ConflictException(
         'Результаты завершённой тренировки изменять нельзя',
       );
     }
+  }
+
+  private async assertAssignableDate(
+    date: string,
+    clientId: string,
+  ): Promise<string> {
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { userId: true, user: { select: { timezone: true } } },
+    });
+
+    if (!client) {
+      throw new NotFoundException('Client not found');
+    }
+
+    const today = dateStringInTimezone(new Date(), client.user.timezone);
+
+    if (date < today) {
+      throw new BadRequestException(
+        'Нельзя назначить тренировку на прошедшую дату',
+      );
+    }
+
+    return client.userId;
   }
 
   private upsertItemResult(
@@ -881,6 +1161,10 @@ export class WorkoutsService {
 
   private async findActiveTemplateEntity(id: string) {
     return this.findTemplateOrThrow({ id, isActive: true });
+  }
+
+  private async findAdminTemplateEntity(id: string) {
+    return this.findTemplateOrThrow({ id, trainerId: null, isActive: true });
   }
 
   private async findReceptionTemplateEntity(gymId: string, id: string) {
@@ -1063,7 +1347,12 @@ export class WorkoutsService {
       gymId: workout.gymId,
       gymName: workout.gym.name,
       date: workout.date.toISOString().slice(0, 10),
+      startTime: workout.startTime,
       status: workout.status,
+      startedAt: workout.startedAt?.toISOString() ?? null,
+      autoFinishAt: workout.startedAt
+        ? new Date(workout.startedAt.getTime() + AUTO_FINISH_MS).toISOString()
+        : null,
       comment: workout.comment,
       templateId: workout.templateId,
       items: workout.items.map((item) => ({

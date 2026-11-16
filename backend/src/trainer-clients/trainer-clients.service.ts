@@ -36,7 +36,6 @@ export interface TrainerClientGymResponse {
 export interface TrainerClientResponse {
   id: string;
   userId: string;
-  phone: string;
   name: string;
   photoUrl: string | null;
   gender: Gender | null;
@@ -90,6 +89,7 @@ export class TrainerClientsService {
   async findAll(
     userId: string,
     gymId?: string,
+    search?: string,
   ): Promise<TrainerClientResponse[]> {
     const trainer = await this.prisma.trainer.findUnique({ where: { userId } });
 
@@ -106,6 +106,9 @@ export class TrainerClientsService {
             ...(gymId ? { gymId } : {}),
           },
         },
+        ...(search
+          ? { user: { name: { contains: search, mode: 'insensitive' as const } } }
+          : {}),
       },
       include: clientInclude,
       orderBy: { createdAt: 'asc' },
@@ -120,7 +123,6 @@ export class TrainerClientsService {
     return {
       id: client.id,
       userId: client.userId,
-      phone: client.user.phone,
       name: client.user.name,
       photoUrl: client.photoUrl,
       gender: client.gender,

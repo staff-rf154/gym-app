@@ -22,6 +22,10 @@ export class TrainerClientsController {
     @CurrentUser('userId') userId: string,
     @Query() query: TrainerClientsQueryDto,
   ): Promise<TrainerClientResponse[]> {
-    return this.trainerClientsService.findAll(userId, query.gym_id);
+    return this.trainerClientsService.findAll(
+      userId,
+      query.gym_id,
+      query.search,
+    );
   }
 }

@@ -2,12 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/widgets/empty_state.dart';
 import '../workouts/workout_models.dart';
 import '../workouts/workouts_providers.dart';
 import 'template_editor_screen.dart';
 
-class TemplatesScreen extends ConsumerWidget {
+class TemplatesScreen extends ConsumerStatefulWidget {
   const TemplatesScreen({super.key});
+
+  @override
+  ConsumerState<TemplatesScreen> createState() => _TemplatesScreenState();
+}
+
+class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   Future<void> _openEditor(
     BuildContext context,
@@ -92,26 +107,62 @@ class TemplatesScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final templates = ref.watch(templatesProvider);
+    final all = templates.asData?.value ?? const <WorkoutTemplate>[];
+    final personalCount = all.where((template) => template.isPersonal).length;
+    final canCreate = personalCount < 10;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Шаблоны тренировок')),
+      appBar: AppBar(title: Text('Шаблоны · $personalCount/10')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(context, ref),
+        onPressed: canCreate ? () => _openEditor(context, ref) : null,
         icon: const Icon(Icons.add),
         label: const Text('Новый шаблон'),
       ),
       body: switch (templates) {
-        AsyncData(:final value) => _TemplatesList(
-          templates: value,
-          onRefresh: () async => ref.invalidate(templatesProvider),
-          onEdit: (template) => template.isPersonal
-              ? _openEditor(context, ref, template)
-              : _showSharedInfo(context, template),
-          onDelete: (template) => template.isPersonal
-              ? _delete(context, ref, template)
-              : _showSharedInfo(context, template),
+        AsyncData(:final value) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: TextField(
+                controller: _search,
+                onChanged: (value) => setState(() => _query = value.trim()),
+                decoration: const InputDecoration(
+                  hintText: 'Поиск по названию',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            if (personalCount >= 10)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Text(
+                  'Достигнут лимит 10 личных шаблонов. '
+                  'Удалите шаблон в архив, чтобы создать новый.',
+                ),
+              ),
+            Expanded(
+              child: _TemplatesList(
+                templates: value
+                    .where(
+                      (template) => template.name.toLowerCase().contains(
+                        _query.toLowerCase(),
+                      ),
+                    )
+                    .toList(),
+                onRefresh: () async => ref.invalidate(templatesProvider),
+                onEdit: (template) => template.isPersonal
+                    ? _openEditor(context, ref, template)
+                    : _showSharedInfo(context, template),
+                onDelete: (template) => template.isPersonal
+                    ? _delete(context, ref, template)
+                    : _showSharedInfo(context, template),
+              ),
+            ),
+          ],
         ),
         AsyncError(:final error) => Center(
           child: Padding(
@@ -156,10 +207,7 @@ class _TemplatesList extends StatelessWidget {
       return RefreshIndicator(
         onRefresh: onRefresh,
         child: ListView(
-          children: const [
-            SizedBox(height: 160),
-            Center(child: Text('Пока нет шаблонов')),
-          ],
+          children: const [EmptyState(message: 'здесь пока пусто')],
         ),
       );
     }

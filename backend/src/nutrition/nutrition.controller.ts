@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { NutritionRecommendation, Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -30,6 +30,24 @@ export class TrainerNutritionController {
     @Body() dto: CreateNutritionDto,
   ): Promise<NutritionRecommendation> {
     return this.nutritionService.create(userId, dto);
+  }
+
+  @Post(':id/archive')
+  @ApiOperation({ summary: 'Отправить рекомендацию в архив' })
+  archive(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<NutritionRecommendation> {
+    return this.nutritionService.archive(userId, id);
+  }
+
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Отменить рекомендацию питания' })
+  cancel(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<NutritionRecommendation> {
+    return this.nutritionService.cancel(userId, id);
   }
 }
 

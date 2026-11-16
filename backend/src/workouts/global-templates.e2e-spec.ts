@@ -261,6 +261,34 @@ describe('Global workout templates (e2e)', () => {
     expect(remove.status).toBe(404);
   });
 
+  it('ADMIN не видит и не меняет личный шаблон тренера', async () => {
+    const created = await authed(trainerToken)
+      .post('/trainer/templates')
+      .send({ name: 'E2E Личный шаблон тренера', items: [item()] });
+
+    expect(created.status).toBe(201);
+    const personalTemplateId = created.body.id as string;
+    expect(created.body.trainerId).not.toBeNull();
+
+    const list = await authed(adminToken).get('/admin/templates');
+    expect(list.status).toBe(200);
+    expect(
+      (list.body as Array<{ id: string }>).some(
+        (template) => template.id === personalTemplateId,
+      ),
+    ).toBe(false);
+
+    const update = await authed(adminToken)
+      .put(`/admin/templates/${personalTemplateId}`)
+      .send({ name: 'Взлом', items: [item()] });
+    expect(update.status).toBe(404);
+
+    const remove = await authed(adminToken).delete(
+      `/admin/templates/${personalTemplateId}`,
+    );
+    expect(remove.status).toBe(404);
+  });
+
   it('RECEPTION не может изменить шаблон другого зала', async () => {
     const response = await authed(receptionToken)
       .put(`/reception/templates/${globalTemplateId}`)

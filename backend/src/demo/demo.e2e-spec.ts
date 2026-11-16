@@ -1,4 +1,5 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -110,6 +111,7 @@ describe('Demo data (e2e)', () => {
     expect(response.body.gyms).toBe(3);
     expect(response.body.trainers).toBe(6);
     expect(response.body.clients).toBe(20);
+    expect(response.body.receptions).toBe(3);
     expect(response.body.exercises).toBe(24);
     expect(response.body.templates).toBe(12);
     expect(response.body.workouts).toBeGreaterThan(600);
@@ -127,7 +129,44 @@ describe('Demo data (e2e)', () => {
     expect(response.body.gyms).toBe(3);
     expect(response.body.trainers).toBe(6);
     expect(response.body.clients).toBe(20);
+    expect(response.body.receptions).toBe(3);
     expect(response.body.workouts).toBeGreaterThan(600);
+  });
+
+  it('создаёт по ресепшену на зал и пускает их по демо-паролю', async () => {
+    const receptions = await prisma.reception.findMany({
+      where: { user: { phone: { startsWith: DEMO_PHONE_PREFIX } } },
+      include: { user: true, gym: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    expect(receptions).toHaveLength(3);
+    expect(new Set(receptions.map((reception) => reception.gymId)).size).toBe(
+      3,
+    );
+    receptions.forEach((reception) => {
+      expect(reception.gym.name.startsWith(DEMO_GYM_PREFIX)).toBe(true);
+      expect(reception.user.role).toBe(Role.RECEPTION);
+      expect(reception.user.phone.startsWith(`${DEMO_PHONE_PREFIX}02`)).toBe(
+        true,
+      );
+    });
+
+    const password =
+      app.get(ConfigService).get<string>('DEFAULT_CLIENT_PASSWORD') ??
+      'DemoPass123!';
+    const response = await request(app.getHttpServer())
+      .post(`${API_PREFIX}/auth/login`)
+      .send({ phone: '+79995550201', password })
+      .expect(200);
+
+    expect(response.body.access_token).toBeTruthy();
+
+    const profile = await request(app.getHttpServer())
+      .get(`${API_PREFIX}/auth/me`)
+      .set('Authorization', `Bearer ${response.body.access_token}`)
+      .expect(200);
+    expect(profile.body.role).toBe(Role.RECEPTION);
   });
 
   it('не допускает повторную загрузку без очистки', async () => {
@@ -197,6 +236,7 @@ describe('Demo data (e2e)', () => {
     expect(response.body.cleared).toBe(true);
     expect(response.body.gyms).toBe(3);
     expect(response.body.clients).toBe(20);
+    expect(response.body.receptions).toBe(3);
 
     const status = await request(app.getHttpServer())
       .get(`${API_PREFIX}/admin/demo/status`)
@@ -207,6 +247,7 @@ describe('Demo data (e2e)', () => {
       gyms: 0,
       trainers: 0,
       clients: 0,
+      receptions: 0,
       workouts: 0,
     });
 
@@ -242,6 +283,7 @@ describe('Demo data (e2e)', () => {
       gyms: 0,
       trainers: 0,
       clients: 0,
+      receptions: 0,
       workouts: 0,
     });
   });

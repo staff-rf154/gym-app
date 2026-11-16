@@ -11,3 +11,11 @@ export const toDateOnly = (value: dayjs.Dayjs | null | undefined): string | null
 
 export const optionalText = (value: string | undefined): string | null =>
   value?.trim() ? value.trim() : null;
+
+export const currentWeekRange = (): [dayjs.Dayjs, dayjs.Dayjs] => {
+  const today = dayjs();
+  const monday = today
+    .subtract((today.day() + 6) % 7, 'day')
+    .startOf('day');
+  return [monday, monday.add(6, 'day')];
+};

@@ -6,6 +6,7 @@ class ChatSummary {
     required this.peerName,
     this.lastMessage,
     required this.unreadCount,
+    this.isBlocked = false,
   });
 
   final String id;
@@ -14,6 +15,7 @@ class ChatSummary {
   final String peerName;
   final String? lastMessage;
   final int unreadCount;
+  final bool isBlocked;
 
   factory ChatSummary.fromJson(Map<String, dynamic> json) {
     return ChatSummary(
@@ -23,6 +25,24 @@ class ChatSummary {
       peerName: (json['peerName'] as String?) ?? '',
       lastMessage: json['lastMessage'] as String?,
       unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+      isBlocked: json['isBlocked'] as bool? ?? false,
+    );
+  }
+}
+
+class ClientTrainerOption {
+  const ClientTrainerOption({
+    required this.trainerId,
+    required this.trainerName,
+  });
+
+  final String trainerId;
+  final String trainerName;
+
+  factory ClientTrainerOption.fromJson(Map<String, dynamic> json) {
+    return ClientTrainerOption(
+      trainerId: json['trainerId'] as String,
+      trainerName: (json['trainerName'] as String?) ?? 'Тренер',
     );
   }
 }

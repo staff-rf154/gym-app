@@ -45,4 +45,12 @@ class UserProfile {
   final String name;
   final String phone;
   final String timezone;
+
+  Map<String, dynamic> toJson() => {
+    'user_id': userId,
+    'role': role,
+    'name': name,
+    'phone': phone,
+    'timezone': timezone,
+  };
 }

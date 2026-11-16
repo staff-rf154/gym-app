@@ -4,12 +4,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ChatType, Message, Prisma, Role } from '@prisma/client';
+import {
+  ChatType,
+  Message,
+  NotificationType,
+  Prisma,
+  Role,
+} from '@prisma/client';
 import {
   PaginatedResponse,
   PaginationQueryDto,
 } from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { dateStringInTimezone } from '../common/timezone';
 import { ChatEvents } from './chat-events.service';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { MessagesQueryDto, SendMessageDto } from './dto/message.dto';
@@ -32,6 +40,7 @@ export interface ChatResponse {
   peerName: string;
   lastMessage: string | null;
   unreadCount: number;
+  isBlocked: boolean;
 }
 
 @Injectable()
@@ -39,6 +48,7 @@ export class ChatsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatEvents: ChatEvents,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findChats(
@@ -69,7 +79,12 @@ export class ChatsService {
     ]);
 
     return {
-      items: chats.map((chat) => this.toResponse(chat, role)),
+      items: await Promise.all(
+        chats.map(async (chat) => ({
+          ...this.toResponse(chat, role),
+          isBlocked: await this.isChatBlocked(chat),
+        })),
+      ),
       total,
       page: query.page,
       limit: query.limit,
@@ -97,7 +112,10 @@ export class ChatsService {
     });
 
     if (existing) {
-      return this.toResponse(existing, role);
+      return {
+        ...this.toResponse(existing, role),
+        isBlocked: await this.isChatBlocked(existing),
+      };
     }
 
     const chat = await this.prisma.chat.create({
@@ -114,7 +132,10 @@ export class ChatsService {
       },
     });
 
-    return this.toResponse(chat, role);
+    return {
+      ...this.toResponse(chat, role),
+      isBlocked: await this.isChatBlocked(chat),
+    };
   }
 
   async findMessages(
@@ -151,6 +172,32 @@ export class ChatsService {
 
     this.chatEvents.emitMessage(message);
 
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      select: {
+        client: { select: { userId: true } },
+        trainer: { select: { userId: true } },
+        adminId: true,
+      },
+    });
+
+    const recipients = [
+      chat?.client?.userId,
+      chat?.trainer?.userId,
+      chat?.adminId,
+    ].filter((id): id is string => Boolean(id) && id !== userId);
+
+    if (recipients.length > 0) {
+      void this.notificationsService.createEvent({
+        recipientIds: recipients,
+        senderId: userId,
+        type: NotificationType.MESSAGE,
+        entityId: chatId,
+        title: 'Новое сообщение',
+        body: dto.text.length > 120 ? `${dto.text.slice(0, 120)}…` : dto.text,
+      });
+    }
+
     return message;
   }
 
@@ -176,10 +223,21 @@ export class ChatsService {
       return false;
     }
 
+    if (chat.adminId === userId) {
+      return true;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    if (user?.role === Role.ADMIN) {
+      return true;
+    }
+
     return (
-      chat.client?.userId === userId ||
-      chat.trainer?.userId === userId ||
-      chat.adminId === userId
+      chat.client?.userId === userId || chat.trainer?.userId === userId
     );
   }
 
@@ -195,7 +253,13 @@ export class ChatsService {
   private async assertActiveLink(chatId: string): Promise<void> {
     const chat = await this.prisma.chat.findUnique({
       where: { id: chatId },
-      select: { clientId: true, trainerId: true },
+      select: {
+        clientId: true,
+        trainerId: true,
+        client: {
+          select: { userId: true, user: { select: { timezone: true } } },
+        },
+      },
     });
 
     if (!chat) {
@@ -220,6 +284,84 @@ export class ChatsService {
         'Chat is read-only because the client-trainer link is inactive',
       );
     }
+
+    if (
+      chat.client &&
+      (await this.isLinkBlocked(
+        chat.clientId,
+        chat.client.user.timezone,
+        chat.trainerId,
+      ))
+    ) {
+      throw new ForbiddenException(
+        'Chat is blocked: no future workout and more than 10 days since the last one',
+      );
+    }
+  }
+
+  private async isChatBlocked(chat: ChatEntity): Promise<boolean> {
+    if (!chat.clientId || !chat.trainerId || !chat.client) {
+      return false;
+    }
+
+    const activeLink = await this.prisma.clientTrainer.findFirst({
+      where: {
+        clientId: chat.clientId,
+        trainerId: chat.trainerId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!activeLink) {
+      return true;
+    }
+
+    return this.isLinkBlocked(
+      chat.clientId,
+      chat.client.user.timezone,
+      chat.trainerId,
+    );
+  }
+
+  private async isLinkBlocked(
+    clientId: string,
+    timezone: string,
+    trainerId?: string | null,
+  ): Promise<boolean> {
+    const today = dateStringInTimezone(new Date(), timezone);
+    const todayDate = new Date(`${today}T00:00:00.000Z`);
+
+    const future = await this.prisma.workout.count({
+      where: {
+        clientId,
+        ...(trainerId ? { trainerId } : {}),
+        date: { gte: todayDate },
+        status: { in: ['PLANNED', 'IN_PROGRESS'] },
+      },
+    });
+
+    if (future > 0) {
+      return false;
+    }
+
+    const last = await this.prisma.workout.findFirst({
+      where: { clientId, ...(trainerId ? { trainerId } : {}) },
+      orderBy: { date: 'desc' },
+      select: { date: true },
+    });
+
+    if (!last) {
+      return true;
+    }
+
+    const lastDate = last.date.toISOString().slice(0, 10);
+    const diffDays =
+      (todayDate.getTime() -
+        new Date(`${lastDate}T00:00:00.000Z`).getTime()) /
+      86_400_000;
+
+    return diffDays > 10;
   }
 
   private async resolveChatParticipants(
@@ -255,6 +397,9 @@ export class ChatsService {
         await this.assertActiveClientTrainer(clientId, trainerId);
         adminId = null;
       } else if (dto.type === ChatType.CLIENT_ADMIN) {
+        if (adminId) {
+          await this.assertAdmin(adminId);
+        }
         adminId = adminId ?? (await this.pickAdminId());
         trainerId = null;
       } else {
@@ -279,6 +424,9 @@ export class ChatsService {
         await this.assertActiveClientTrainer(clientId, trainerId);
         adminId = null;
       } else if (dto.type === ChatType.TRAINER_ADMIN) {
+        if (adminId) {
+          await this.assertAdmin(adminId);
+        }
         adminId = adminId ?? (await this.pickAdminId());
         clientId = null;
       } else {
@@ -343,6 +491,17 @@ export class ChatsService {
     return admin.id;
   }
 
+  private async assertAdmin(adminId: string): Promise<void> {
+    const admin = await this.prisma.user.findFirst({
+      where: { id: adminId, role: Role.ADMIN },
+      select: { id: true },
+    });
+
+    if (!admin) {
+      throw new BadRequestException('admin_id must reference an admin');
+    }
+  }
+
   private async buildParticipantWhere(
     userId: string,
     role: Role,
@@ -373,10 +532,17 @@ export class ChatsService {
       return { trainerId: trainer.id };
     }
 
+    if (role === Role.ADMIN) {
+      return {};
+    }
+
     return { adminId: userId };
   }
 
-  private toResponse(chat: ChatEntity, role: Role): ChatResponse {
+  private toResponse(
+    chat: ChatEntity,
+    role: Role,
+  ): Omit<ChatResponse, 'isBlocked'> {
     const peer = this.resolvePeer(chat, role);
 
     return {

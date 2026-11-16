@@ -11,9 +11,9 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
-import dayjs from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../api/client';
+import { currentWeekRange } from '../../utils/format';
 import { useReportLookups } from './useReportLookups';
 
 interface TrainerReportClientItem {
@@ -37,10 +37,7 @@ const clientColumns: ColumnsType<TrainerReportClientItem> = [
 
 export default function TrainersReportPage() {
   const { gyms, trainers } = useReportLookups();
-  const [range, setRange] = useState<[Dayjs, Dayjs]>([
-    dayjs().subtract(29, 'day'),
-    dayjs(),
-  ]);
+  const [range, setRange] = useState<[Dayjs, Dayjs]>(currentWeekRange());
   const [gymId, setGymId] = useState<string | undefined>();
   const [trainerId, setTrainerId] = useState<string | undefined>();
 

@@ -85,6 +85,13 @@ class WorkoutItemCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(item.planLabel, style: theme.textTheme.bodySmall),
+                      if (!enabled)
+                        Text(
+                          item.factLabel,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -158,6 +165,7 @@ class WorkoutStepView extends StatelessWidget {
     this.onSave,
     this.onFinish,
     this.saving = false,
+    this.editable = true,
     super.key,
   });
 
@@ -170,6 +178,7 @@ class WorkoutStepView extends StatelessWidget {
   final VoidCallback? onSave;
   final VoidCallback? onFinish;
   final bool saving;
+  final bool editable;
 
   @override
   Widget build(BuildContext context) {
@@ -214,8 +223,10 @@ class WorkoutStepView extends StatelessWidget {
             WorkoutItemCard(
               item: item,
               controllers: controllers[item.id]!,
-              enabled: true,
-              onDoneChanged: (value) => onDoneChanged(item.id, value),
+              enabled: editable,
+              onDoneChanged: editable
+                  ? (value) => onDoneChanged(item.id, value)
+                  : null,
             ),
             const SizedBox(height: 4),
             Wrap(
@@ -228,18 +239,19 @@ class WorkoutStepView extends StatelessWidget {
                   icon: const Icon(Icons.chevron_left),
                   label: const Text('Назад'),
                 ),
-                TextButton.icon(
-                  onPressed: saving ? null : onSave,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('Сохранить результаты'),
-                ),
-                if (isLast)
+                if (editable)
+                  TextButton.icon(
+                    onPressed: saving ? null : onSave,
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Сохранить результаты'),
+                  ),
+                if (isLast && editable && onFinish != null)
                   FilledButton.icon(
                     onPressed: saving ? null : onFinish,
                     icon: const Icon(Icons.flag_outlined),
                     label: const Text('Закончить тренировку'),
                   )
-                else
+                else if (!isLast)
                   FilledButton.icon(
                     onPressed: saving ? null : onNext,
                     icon: const Icon(Icons.chevron_right),

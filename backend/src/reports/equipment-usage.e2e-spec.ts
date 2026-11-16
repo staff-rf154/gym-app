@@ -288,7 +288,7 @@ describe('Reports equipment usage (e2e)', () => {
 
     await createWorkout(
       '2027-10-01',
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       clientId,
       trainerId,
       gymId,
@@ -296,7 +296,7 @@ describe('Reports equipment usage (e2e)', () => {
     );
     await createWorkout(
       '2027-10-02',
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       otherClientId,
       trainerId,
       gymId,
@@ -304,7 +304,7 @@ describe('Reports equipment usage (e2e)', () => {
     );
     await createWorkout(
       '2027-10-03',
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       clientId,
       otherTrainerId,
       otherGymId,
@@ -312,7 +312,7 @@ describe('Reports equipment usage (e2e)', () => {
     );
     await createWorkout(
       '2027-10-04',
-      WorkoutStatus.SKIPPED,
+      WorkoutStatus.MISSED,
       clientId,
       trainerId,
       gymId,
@@ -320,7 +320,7 @@ describe('Reports equipment usage (e2e)', () => {
     );
     await createWorkout(
       '2027-10-05',
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       clientId,
       trainerId,
       gymId,

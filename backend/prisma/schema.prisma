@@ -37,13 +37,22 @@ enum Gender {
 enum WorkoutStatus {
   PLANNED
   IN_PROGRESS
-  DONE
-  SKIPPED
+  COMPLETED
+  AUTO_CLOSED
+  MISSED
 }
 
 enum NutritionType {
   DAILY
   POST_WORKOUT
+}
+
+enum NotificationType {
+  SYSTEM
+  WORKOUT
+  MESSAGE
+  CHAT
+  NUTRITION
 }
 
 enum ChatType {
@@ -317,7 +326,10 @@ model Workout {
   trainerId  String        @db.Uuid
   gymId      String        @db.Uuid
   date       DateTime      @db.Date
+  startTime  String?       @db.VarChar(5)
   status     WorkoutStatus @default(PLANNED)
+  startedAt  DateTime?     @db.Timestamptz
+  reminderSentAt DateTime? @db.Timestamptz
   comment    String?
   templateId String?       @db.Uuid
   createdAt  DateTime      @default(now()) @db.Timestamptz
@@ -332,6 +344,7 @@ model Workout {
   @@index([trainerId, date])
   @@index([gymId, date])
   @@index([status])
+  @@index([status, startedAt])
 }
 
 model WorkoutItem {
@@ -378,6 +391,8 @@ model NutritionRecommendation {
   comment   String?
   validFrom DateTime?     @db.Date
   validTo   DateTime?     @db.Date
+  isActive  Boolean       @default(true)
+  archivedAt DateTime?    @db.Timestamptz
   createdAt DateTime      @default(now()) @db.Timestamptz
 
   client  Client  @relation(fields: [clientId], references: [id])
@@ -421,12 +436,14 @@ model Message {
 }
 
 model Notification {
-  id        String   @id @default(uuid()) @db.Uuid
-  gymId     String?  @db.Uuid
+  id        String           @id @default(uuid()) @db.Uuid
+  gymId     String?          @db.Uuid
+  type      NotificationType @default(SYSTEM)
+  entityId  String?          @db.Uuid
   title     String
   body      String
-  senderId  String   @db.Uuid
-  createdAt DateTime @default(now()) @db.Timestamptz
+  senderId  String           @db.Uuid
+  createdAt DateTime         @default(now()) @db.Timestamptz
 
   gym        Gym?                    @relation(fields: [gymId], references: [id])
   sender     User                    @relation(fields: [senderId], references: [id])
@@ -434,6 +451,7 @@ model Notification {
 
   @@index([gymId, createdAt])
   @@index([senderId])
+  @@index([type, createdAt])
 }
 
 model NotificationRecipient {

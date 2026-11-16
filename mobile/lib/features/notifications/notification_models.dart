@@ -6,6 +6,8 @@ class AppNotification {
     required this.createdAt,
     required this.readAt,
     this.gymId,
+    this.type = 'SYSTEM',
+    this.entityId,
   });
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
@@ -18,6 +20,8 @@ class AppNotification {
       readAt: json['readAt'] == null
           ? null
           : DateTime.parse(json['readAt'] as String),
+      type: (json['type'] as String?) ?? 'SYSTEM',
+      entityId: json['entityId'] as String?,
     );
   }
 
@@ -27,6 +31,8 @@ class AppNotification {
   final String body;
   final DateTime createdAt;
   final DateTime? readAt;
+  final String type;
+  final String? entityId;
 
   bool get isRead => readAt != null;
 }

@@ -28,6 +28,8 @@ class NutritionRecommendation {
     this.comment,
     this.validFrom,
     this.validTo,
+    this.isActive = true,
+    this.archivedAt,
     required this.createdAt,
   });
 
@@ -42,6 +44,8 @@ class NutritionRecommendation {
   final String? comment;
   final DateTime? validFrom;
   final DateTime? validTo;
+  final bool isActive;
+  final DateTime? archivedAt;
   final DateTime createdAt;
 
   factory NutritionRecommendation.fromJson(Map<String, dynamic> json) {
@@ -57,6 +61,8 @@ class NutritionRecommendation {
       comment: json['comment'] as String?,
       validFrom: _toDate(json['validFrom']),
       validTo: _toDate(json['validTo']),
+      isActive: json['isActive'] as bool? ?? true,
+      archivedAt: _toDate(json['archivedAt']),
       createdAt: _toDate(json['createdAt']) ?? DateTime.now().toUtc(),
     );
   }

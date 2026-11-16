@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/widgets/empty_state.dart';
+import '../auth/auth_controller.dart';
 import 'chat_models.dart';
 import 'chat_providers.dart';
 import 'chat_screen.dart';
@@ -52,12 +54,19 @@ class _ChatsList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (chats.isEmpty) {
+      final role = ref.watch(authControllerProvider).value?.role;
       return RefreshIndicator(
         onRefresh: () async => ref.invalidate(chatsProvider),
         child: ListView(
-          children: const [
-            SizedBox(height: 160),
-            Center(child: Text('Чатов пока нет')),
+          children: [
+            EmptyState(
+              message: 'здесь пока пусто',
+              icon: Icons.chat_bubble_outline,
+              actionLabel: role == 'CLIENT' ? 'Написать тренеру' : null,
+              onAction: role == 'CLIENT'
+                  ? () => _startTrainerChat(context, ref)
+                  : null,
+            ),
           ],
         ),
       );
@@ -74,7 +83,9 @@ class _ChatsList extends ConsumerWidget {
             leading: CircleAvatar(child: Text(_initial(chat.peerName))),
             title: Text(chat.peerName),
             subtitle: Text(
-              chat.lastMessage ?? 'Нет сообщений',
+              chat.isBlocked
+                  ? 'Переписка заблокирована'
+                  : chat.lastMessage ?? 'Нет сообщений',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -93,6 +104,67 @@ class _ChatsList extends ConsumerWidget {
   static String _initial(String name) {
     final trimmed = name.trim();
     return trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
+  }
+
+  Future<void> _startTrainerChat(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    try {
+      final trainers = await ref.read(chatApiProvider).fetchClientTrainers();
+      if (!context.mounted) {
+        return;
+      }
+      if (trainers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Нет активного тренера')),
+        );
+        return;
+      }
+
+      final selected = trainers.length == 1
+          ? trainers.first
+          : await showModalBottomSheet<ClientTrainerOption>(
+              context: context,
+              builder: (sheetContext) => SafeArea(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    const ListTile(title: Text('Выберите тренера')),
+                    for (final trainer in trainers)
+                      ListTile(
+                        leading: CircleAvatar(
+                          child: Text(_initial(trainer.trainerName)),
+                        ),
+                        title: Text(trainer.trainerName),
+                        onTap: () => Navigator.of(sheetContext).pop(trainer),
+                      ),
+                  ],
+                ),
+              ),
+            );
+      if (selected == null || !context.mounted) {
+        return;
+      }
+
+      final chat = await ref.read(chatApiProvider).createChat(
+        type: 'CLIENT_TRAINER',
+        trainerId: selected.trainerId,
+      );
+      ref.invalidate(chatsProvider);
+      if (!context.mounted) {
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => ChatScreen(chat: chat)),
+      );
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(apiErrorMessage(error))),
+        );
+      }
+    }
   }
 }
 

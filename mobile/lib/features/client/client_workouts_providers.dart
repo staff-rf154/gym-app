@@ -39,6 +39,13 @@ final clientMonthWorkoutsProvider =
           .fetchWorkouts(from: month.firstDay, to: month.lastDay);
     });
 
+final clientAllWorkoutsProvider = FutureProvider<List<ClientWorkout>>((ref) {
+  final now = DateTime.now();
+  return ref
+      .watch(clientWorkoutsApiProvider)
+      .fetchWorkouts(from: DateTime(2020), to: DateTime(now.year + 1, 12, 31));
+});
+
 final clientWorkoutProvider = FutureProvider.family<ClientWorkout, String>(
   (ref, id) => ref.watch(clientWorkoutsApiProvider).fetchWorkout(id),
 );

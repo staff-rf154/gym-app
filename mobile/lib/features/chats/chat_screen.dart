@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -80,6 +82,7 @@ class _ChatConversationState extends ConsumerState<ChatConversation> {
         _error = null;
       });
       _scrollToBottom();
+      unawaited(_markRead());
     } catch (error) {
       if (mounted) {
         setState(() => _error = apiErrorMessage(error));
@@ -148,6 +151,17 @@ class _ChatConversationState extends ConsumerState<ChatConversation> {
       _messageIds.add(message.id);
     });
     _scrollToBottom();
+    if (message.senderId != _currentUserId) {
+      unawaited(_markRead());
+    }
+  }
+
+  Future<void> _markRead() async {
+    try {
+      await ref.read(chatApiProvider).markRead(widget.chat.id);
+    } catch (_) {
+      // Badge will refresh on the next chat list load.
+    }
   }
 
   void _scrollToBottom() {
@@ -224,6 +238,15 @@ class _ChatConversationState extends ConsumerState<ChatConversation> {
             ],
           ),
         Expanded(child: _buildMessages(context)),
+        if (widget.chat.isBlocked)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(
+              'Переписка заблокирована: нет будущей тренировки '
+              'и прошло более 10 дней с последней.',
+              textAlign: TextAlign.center,
+            ),
+          ),
         SafeArea(
           top: false,
           child: Padding(
@@ -233,6 +256,7 @@ class _ChatConversationState extends ConsumerState<ChatConversation> {
                 Expanded(
                   child: TextField(
                     controller: _textController,
+                    enabled: !widget.chat.isBlocked,
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
                     decoration: const InputDecoration(
@@ -244,7 +268,7 @@ class _ChatConversationState extends ConsumerState<ChatConversation> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  onPressed: _send,
+                  onPressed: widget.chat.isBlocked ? null : _send,
                   icon: const Icon(Icons.send),
                   tooltip: 'Отправить',
                 ),

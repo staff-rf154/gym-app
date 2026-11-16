@@ -221,6 +221,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: Text(client.isConfigured ? client.baseUrl : 'Не задан'),
           onTap: _editServerUrl,
         ),
+        const ListTile(
+          leading: Icon(Icons.info_outline),
+          title: Text('О приложении'),
+          subtitle: Text('Gym App 1.0.8 (10) · сервер gym-app'),
+        ),
         const Divider(),
         ListTile(
           leading: const Icon(Icons.logout, color: Colors.red),

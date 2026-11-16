@@ -6,6 +6,8 @@ import {
   Empty,
   Form,
   Input,
+  Modal,
+  Select,
   Space,
   Table,
   Tag,
@@ -28,6 +30,17 @@ interface Chat {
   peerName: string;
   lastMessage: string | null;
   unreadCount: number;
+  isBlocked: boolean;
+}
+
+interface PeerOption {
+  id: string;
+  name: string;
+}
+
+interface CreateChatFormValues {
+  type: 'CLIENT_ADMIN' | 'TRAINER_ADMIN';
+  peer_id: string;
 }
 
 interface Message {
@@ -52,9 +65,70 @@ const TYPE_LABELS: Record<ChatType, string> = {
 
 export default function ChatsPage() {
   const [form] = Form.useForm<MessageFormValues>();
+  const [createForm] = Form.useForm<CreateChatFormValues>();
   const queryClient = useQueryClient();
   const currentUserId = useAuthStore((state) => state.user?.user_id);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createType, setCreateType] =
+    useState<CreateChatFormValues['type']>('CLIENT_ADMIN');
+
+  const { data: clients = [] } = useQuery({
+    queryKey: ['chat-clients'],
+    queryFn: async () => {
+      const { data } = await api.get<PaginatedResponse<PeerOption>>(
+        '/admin/clients',
+        { params: { limit: 100 } },
+      );
+      return data.items;
+    },
+  });
+
+  const { data: trainers = [] } = useQuery({
+    queryKey: ['chat-trainers'],
+    queryFn: async () => {
+      const { data } = await api.get<PaginatedResponse<PeerOption>>(
+        '/admin/trainers',
+        { params: { limit: 100 } },
+      );
+      return data.items;
+    },
+  });
+
+  const createChatMutation = useMutation({
+    mutationFn: async (values: CreateChatFormValues) => {
+      const { data } = await api.post<Chat>('/chats', {
+        type: values.type,
+        ...(values.type === 'CLIENT_ADMIN'
+          ? { client_id: values.peer_id }
+          : { trainer_id: values.peer_id }),
+      });
+      return data;
+    },
+    onSuccess: (chat) => {
+      setCreateOpen(false);
+      createForm.resetFields();
+      setActiveChat(chat);
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+    },
+    onError: () => message.error('Не удалось создать чат'),
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: async (chatId: string) => {
+      await api.post(`/chats/${chatId}/read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+    },
+  });
+
+  const openChat = (chat: Chat) => {
+    setActiveChat(chat);
+    if (chat.unreadCount > 0) {
+      markReadMutation.mutate(chat.id);
+    }
+  };
 
   const {
     data: chats = [],
@@ -135,7 +209,7 @@ export default function ChatsPage() {
       key: 'actions',
       width: 100,
       render: (_, chat) => (
-        <Button type="link" onClick={() => setActiveChat(chat)}>
+        <Button type="link" onClick={() => openChat(chat)}>
           Открыть
         </Button>
       ),
@@ -149,9 +223,17 @@ export default function ChatsPage() {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Typography.Title level={4} style={{ margin: 0 }}>
-        Чаты
-      </Typography.Title>
+      <Space
+        align="center"
+        style={{ width: '100%', justifyContent: 'space-between' }}
+      >
+        <Typography.Title level={4} style={{ margin: 0 }}>
+          Чаты
+        </Typography.Title>
+        <Button type="primary" onClick={() => setCreateOpen(true)}>
+          Новый чат
+        </Button>
+      </Space>
 
       {isError && (
         <Alert
@@ -167,7 +249,11 @@ export default function ChatsPage() {
       )}
 
       {!isLoading && !isError && chats.length === 0 ? (
-        <Empty description="Чатов пока нет" />
+        <Empty description="Чатов пока нет">
+          <Button type="primary" onClick={() => setCreateOpen(true)}>
+            Начать чат
+          </Button>
+        </Empty>
       ) : (
         <Table<Chat>
           rowKey="id"
@@ -186,6 +272,13 @@ export default function ChatsPage() {
       >
         {activeChat && (
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {activeChat.isBlocked && (
+              <Alert
+                type="warning"
+                showIcon
+                message="Переписка заблокирована: нет будущей тренировки и прошло более 10 дней с последней."
+              />
+            )}
             <div
               style={{
                 display: 'flex',
@@ -260,12 +353,17 @@ export default function ChatsPage() {
                 name="text"
                 rules={[{ required: true, message: 'Введите сообщение' }]}
               >
-                <Input.TextArea rows={3} placeholder="Введите сообщение" />
+                <Input.TextArea
+                  rows={3}
+                  placeholder="Введите сообщение"
+                  disabled={activeChat.isBlocked}
+                />
               </Form.Item>
               <Button
                 type="primary"
                 htmlType="submit"
                 loading={sendMutation.isPending}
+                disabled={activeChat.isBlocked}
               >
                 Отправить
               </Button>
@@ -273,6 +371,52 @@ export default function ChatsPage() {
           </Space>
         )}
       </Drawer>
+
+      <Modal
+        title="Новый чат"
+        open={createOpen}
+        onCancel={() => {
+          setCreateOpen(false);
+          createForm.resetFields();
+        }}
+        onOk={() => createForm.submit()}
+        confirmLoading={createChatMutation.isPending}
+        okText="Создать"
+      >
+        <Form<CreateChatFormValues>
+          form={createForm}
+          layout="vertical"
+          initialValues={{ type: 'CLIENT_ADMIN' }}
+          onFinish={(values) => createChatMutation.mutate(values)}
+        >
+          <Form.Item name="type" label="Собеседник" rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: 'CLIENT_ADMIN', label: 'Клиент' },
+                { value: 'TRAINER_ADMIN', label: 'Тренер' },
+              ]}
+              onChange={(value: CreateChatFormValues['type']) => {
+                setCreateType(value);
+                createForm.setFieldValue('peer_id', undefined);
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="peer_id"
+            label={createType === 'CLIENT_ADMIN' ? 'Клиент' : 'Тренер'}
+            rules={[{ required: true, message: 'Выберите собеседника' }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="Начните вводить имя"
+              options={(createType === 'CLIENT_ADMIN' ? clients : trainers).map(
+                (item) => ({ value: item.id, label: item.name }),
+              )}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Space>
   );
 }

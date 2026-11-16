@@ -1,10 +1,11 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Role } from '@prisma/client';
+import { NotificationType, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from './notifications.service';
 
 const API_PREFIX = '/api/v1';
 const ADMIN_PHONE = '+79990001101';
@@ -42,6 +43,7 @@ describe('Notifications (e2e)', () => {
   let gymOneId: string;
   let gymTwoId: string;
   let adminToken: string;
+  let trainerToken: string;
   let clientAToken: string;
   let clientBToken: string;
   let clientCToken: string;
@@ -205,6 +207,7 @@ describe('Notifications (e2e)', () => {
     });
 
     adminToken = await login(ADMIN_PHONE);
+    trainerToken = await login(TRAINER_PHONE);
     clientAToken = await login(CLIENT_A_PHONE);
     clientBToken = await login(CLIENT_B_PHONE);
     clientCToken = await login(CLIENT_C_PHONE);
@@ -255,6 +258,8 @@ describe('Notifications (e2e)', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.gymId).toBe(gymOneId);
+    expect(response.body.type).toBe('SYSTEM');
+    expect(response.body.entityId).toBeNull();
     gymNotificationId = response.body.id as string;
 
     const recipients = await prisma.notificationRecipient.findMany({
@@ -364,9 +369,33 @@ describe('Notifications (e2e)', () => {
     expect(response.status).toBe(404);
   });
 
-  it('GET /notifications админом → 403', async () => {
-    const response = await authed(adminToken).get('/notifications');
+  it('createEvent сохраняет тип и сущность и отдаёт их в списке', async () => {
+    const entityId = '00000000-0000-4000-8000-000000000001';
+    await app.get(NotificationsService).createEvent({
+      recipientIds: [clientAUserId],
+      senderId: adminId,
+      type: NotificationType.WORKOUT,
+      entityId,
+      title: `${TITLE_PREFIX} Workout`,
+      body: 'Событие тренировки',
+      gymId: gymOneId,
+    });
 
-    expect(response.status).toBe(403);
+    const response = await authed(clientAToken).get('/notifications');
+    const item = response.body.items.find(
+      (row: { title: string }) => row.title === `${TITLE_PREFIX} Workout`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(item.type).toBe('WORKOUT');
+    expect(item.entityId).toBe(entityId);
+  });
+
+  it('GET /notifications доступен тренеру и админу', async () => {
+    const trainerResponse = await authed(trainerToken).get('/notifications');
+    const adminResponse = await authed(adminToken).get('/notifications');
+
+    expect(trainerResponse.status).toBe(200);
+    expect(adminResponse.status).toBe(200);
   });
 });

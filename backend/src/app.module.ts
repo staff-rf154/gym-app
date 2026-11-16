@@ -28,6 +28,7 @@ import { ReceptionsModule } from './receptions/receptions.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DemoModule } from './demo/demo.module';
 import { ReportsModule } from './reports/reports.module';
+import { ServerSettingsModule } from './server-settings/server-settings.module';
 import { TrainerClientsModule } from './trainer-clients/trainer-clients.module';
 import { TrainersModule } from './trainers/trainers.module';
 import { UploadController } from './upload/upload.controller';
@@ -101,6 +102,7 @@ import { WorkoutsModule } from './workouts/workouts.module';
     ClientTrainersModule,
     WeightMeasurementsModule,
     ReportsModule,
+    ServerSettingsModule,
     WorkoutsModule,
     TrainerClientsModule,
     NutritionModule,

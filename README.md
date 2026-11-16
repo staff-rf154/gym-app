@@ -1,282 +1,154 @@
 # Gym App
 
 Информационная система спортивного зала: администратор и ресепшн работают в
-веб-панели, тренер и клиент — в едином мобильном приложении для Android.
-Backend — NestJS + Prisma + PostgreSQL + Redis.
+веб-панели, тренер и клиент — в едином Android-приложении.
 
-Проект закрывает полный цикл работы зала:
+- Backend: NestJS + Prisma + PostgreSQL + Redis.
+- Web-admin: React + Vite + Ant Design.
+- Mobile: Flutter (одно приложение для тренера и клиента).
+- Внешний вход: HTTPS `https://demogym.staff-rf.ru:3000`.
+- API: `https://demogym.staff-rf.ru:3000/api/v1`.
 
-- администратор ведёт залы, тренажёры, упражнения, продукты, клиентов,
-  тренеров, цели и отчёты;
-- ресепшн регистрирует клиентов и назначает им тренеров;
-- тренер сопровождает клиентов: назначает тренировки и питание, фиксирует
-  замеры, смотрит прогресс и общается в чате;
-- клиент видит календарь тренировок, выполняет тренировку дня, смотрит
-  питание и отчёты, общается с тренером и получает push-уведомления.
+## Возможности
 
-## Стек
+- ADMIN: залы, тренажёры, упражнения, продукты, цели, клиенты, тренеры,
+  ресепшены, связи, замеры, шаблоны, отчёты, рассылки, чаты, настройки сервера.
+- RECEPTION: клиенты, тренеры и связи только своего зала, замеры, сброс
+  паролей, шаблоны своего зала, уведомления.
+- TRAINER: клиенты, календарь, тренировки, шаблоны, прогресс, питание, замеры,
+  чат, push.
+- CLIENT: календарь, выполнение тренировки, питание, отчёты и PDF, выбор
+  тренера, чат, уведомления, профиль.
+- Жизненный цикл тренировки: `PLANNED → IN_PROGRESS → COMPLETED`, а также
+  `AUTO_CLOSED` через 2 часа и `MISSED` в 00:00 следующего дня по TZ клиента.
+- Завершённые тренировки доступны только для чтения и свободно листаются.
 
-| Компонент | Технологии |
-| --- | --- |
-| Backend | NestJS 10, Prisma 6, PostgreSQL 16, Redis 7, JWT, Socket.IO, Swagger |
-| Web-admin | React 19, Vite, TypeScript, Ant Design, TanStack Query, Zustand, axios |
-| Mobile | Flutter (Dart), Riverpod, Dio, fl_chart, socket_io_client, Firebase Messaging |
-
-## Структура репозитория
+## Структура
 
 ```
 backend/      NestJS API, Prisma schema/migrations/seed, e2e-тесты
-web-admin/    Веб-панель администратора и ресепшн (nginx в проде)
+web-admin/    Веб-панель администратора и ресепшн (nginx + TLS)
 mobile/       Flutter-приложение (тренер + клиент)
-docs/         ТЗ, ER-модель, описание API, журналы заданий
+docs/         ТЗ, ER-модель, OpenAPI, инструкция по ключам RuStore
 docker-compose.yml
 Makefile
 ```
 
-## Роли и точки входа
+## Роли
 
 | Роль | Интерфейс | Основные задачи |
 | --- | --- | --- |
 | `ADMIN` | web-admin | справочники, сотрудники, отчёты, настройки |
-| `RECEPTION` | web-admin | клиенты, тренировки, назначение тренеров |
+| `RECEPTION` | web-admin | клиенты и тренеры своего зала |
 | `TRAINER` | mobile | клиенты, тренировки, шаблоны, прогресс, питание, чат |
-| `CLIENT` | mobile | календарь, выполнение тренировок, питание, отчёты, чат |
+| `CLIENT` | mobile | календарь, тренировка дня, питание, отчёты, чат |
 
-Мобильное приложение поддерживает только роли `TRAINER` и `CLIENT`. Если
-пользователь с другой ролью пытается войти в приложение, токены очищаются
-и показывается сообщение «Роль пользователя не поддерживается».
+Мобильное приложение поддерживает только `TRAINER` и `CLIENT`. Для другой роли
+токены очищаются и показывается «Роль пользователя не поддерживается».
 
----
+## Быстрый старт (Docker)
 
-# Mobile — приложение тренера и клиента
+Требования: Docker + Compose, Node.js 20+ и pnpm для локальной разработки,
+Flutter SDK для mobile.
 
-## Зачем нужно мобильное приложение
+```bash
+cp .env.example .env
+nano .env
+make up
+```
 
-Мобильное приложение — основной рабочий инструмент тренера и клиента
-непосредственно в зале и вне его. Веб-панель предназначена для
-административных задач и неудобна в сценариях «здесь и сейчас»:
+При старте backend применяет миграции и выполняет идемпотентный seed
+(администратор из `ADMIN_PHONE`/`ADMIN_PASSWORD`, справочники и шаблоны).
 
-- тренер находится рядом с клиентом и должен за секунды открыть карточку,
-  посмотреть последние тренировки, назначить новую или поставить замер;
-- клиент выполняет тренировку по телефону: отмечает подходы, вводит рабочий
-  вес и повторения, завершает тренировку;
-- оба участника должны получать уведомления и общаться в чате без компьютера;
-- все данные сразу попадают в общую базу и видны администратору в web-admin.
+Проверка:
 
-Приложение одно на обе роли: после входа backend сообщает роль, и интерфейс
-автоматически перестраивается под тренера или клиента. Отдельные APK для
-тренера и клиента не нужны.
+```bash
+curl -k https://127.0.0.1:3000/api/v1/health   # {"status":"ok"}
+```
 
-## Ключевые возможности
+- Web-admin: `https://<host>:3000`
+- Swagger: `https://<host>:3000/api/docs` (при `ENABLE_SWAGGER=true`)
+- OpenAPI JSON: `https://<host>:3000/api/docs-json`
+- Backend внутри Compose: `http://backend:8080`
 
-### Для тренера
+Остановка:
 
-- **Список клиентов** — только клиенты, назначенные этому тренеру
-  (с учётом зала). Показывает имя, телефон и текущий вес.
-- **Карточка клиента** с пятью разделами:
-  - `Тренировки` — история тренировок клиента, фильтр по залу, создание
-    новой тренировки;
-  - `Прогресс` — график динамики веса и жировой массы, сводка по
-    упражнениям, детальный график «план / факт» по упражнению;
-  - `Питание` — назначенные рекомендации и создание новой;
-  - `Вес` — стартовый и текущий вес, изменение, история замеров,
-    добавление замера;
-  - `Чат` — переписка с клиентом.
-- **Создание и редактирование тренировки**:
-  - выбор зала из залов, к которым привязан тренер;
-  - выбор шаблона (необязательно) или сборка с нуля;
-  - дата, комментарий;
-  - упражнения с подходами, повторениями, планируемым весом и тренажёром
-    (оборудование зала).
-- **Шаблоны тренировок** — создание, редактирование и удаление шаблонов с
-  набором упражнений.
-- **Тренировки на сегодня** — отдельный экран со стартом, продолжением и
-  завершением тренировок, вводом фактических результатов по упражнениям.
-- **Назначение питания** — тип (ежедневное / после тренировки), калории,
-  белки, жиры, углеводы, период действия и комментарий.
-- **Замеры веса** — вес, процент жира, дата и комментарий.
-- **Мои залы** — список залов, к которым привязан тренер.
-- **Чаты, уведомления, настройки**.
+```bash
+make down
+docker compose down -v   # с удалением БД
+```
 
-### Для клиента
+## Команды
 
-- **Календарь тренировок** — месяц с отметками тренировок по дням,
-  переключение месяцев, возврат к текущему месяцу, легенда статусов.
-- **Тренировка дня**:
-  - просмотр плана по упражнениям;
-  - старт и завершение тренировки;
-  - отметка выполнения каждого упражнения;
-  - ввод фактического веса, повторений и комментария;
-  - статусы `Запланирована`, `В процессе`, `Выполнена`, `Пропущена`.
-- **Питание** — рекомендации на выбранную дату.
-- **Отчёты**:
-  - динамика веса и жировой массы;
-  - сводка по упражнениям;
-  - график прогресса по конкретному упражнению.
-- **Мои залы** — список залов клиента и выбор тренера в зале, отвязка
-  тренера.
-- **Чаты** — переписка с тренером и администрацией.
-- **Уведомления** — список уведомлений и счётчик непрочитанных.
-- **Настройки** — профиль, часовой пояс, адрес сервера, выход.
-
-## Как устроена работа приложения
-
-### Вход и определение роли
-
-1. При запуске приложение читает сохранённые токены из
-   `flutter_secure_storage`.
-2. Если токен есть, выполняется `GET /auth/me`.
-3. Роль `CLIENT` открывает клиентский интерфейс, роль `TRAINER` —
-   тренерский.
-4. Access-токен живёт 15 минут, refresh-токен — 30 дней. При `401` Dio-
-   интерцептор автоматически обновляет токены и повторяет запрос. Если
-   обновить не удалось, токены очищаются и показывается экран входа.
-
-### Настройка сервера
-
-Базовый URL можно задать двумя способами:
-
-- при сборке: `--dart-define=API_URL=http://<host>:8080/api/v1`;
-- в приложении: иконка «Адрес сервера» на экране входа или раздел
-  «Адрес сервера» в настройках.
-
-Адрес нормализуется автоматически: добавляется `http://`, если схема не
-указана, и `/api/v1`, если путь не задан. Для локальной сети разрешён
-cleartext HTTP (`usesCleartextTraffic="true"`).
-
-### Обновление данных
-
-- Списки и карточки загружаются через Riverpod `FutureProvider`.
-- Есть pull-to-refresh и кнопки «Повторить» при ошибках сети.
-- После создания или изменения данных соответствующие провайдеры
-  инвалидируются, поэтому списки обновляются без перезапуска приложения.
-
-### Чат
-
-- История и отправка сообщений идут через REST:
-  `GET/POST /chats/:id/messages`.
-- Онлайн-доставка — через Socket.IO, namespace `/chat`, авторизация JWT.
-- Список чатов показывает имя собеседника, последнее сообщение, время и
-  количество непрочитанных.
-
-### Push-уведомления
-
-- Используется Firebase Cloud Messaging.
-- При входе приложение запрашивает разрешение, получает FCM-токен и
-  отправляет его на backend (`PATCH /auth/push-token`).
-- При обновлении токена он повторно регистрируется.
-- При получении сообщения список уведомлений обновляется, на иконке
-  показывается счётчик непрочитанных.
-- Без `google-services.json` приложение работает, но push отключён.
-
-### Часовой пояс
-
-Пользователь выбирает часовой пояс в настройках; значение сохраняется на
-backend (`PATCH /auth/timezone`). Это влияет на даты тренировок, питания и
-уведомлений.
-
-## Техническая реализация mobile
-
-| Слой | Решение |
+| Команда | Действие |
 | --- | --- |
-| UI | Flutter, Material 3, русскоязычный интерфейс |
-| Состояние | Riverpod (`AsyncNotifier`, `FutureProvider`, `Provider.family`) |
-| HTTP | Dio + интерцепторы авторизации и refresh-токена |
-| Хранение токенов | `flutter_secure_storage` |
-| Графики | `fl_chart` (вес, жир, план/факт по упражнениям) |
-| Realtime | `socket_io_client` |
-| Push | `firebase_core`, `firebase_messaging` |
-| Форматирование | `intl` |
+| `make up` | собрать и запустить стек |
+| `make down` | остановить контейнеры |
+| `make migrate` | применить миграции Prisma |
+| `make seed` | идемпотентный seed |
+| `make test` | backend e2e на БД `gym_test` |
+| `make logs` | логи backend |
+| `make psql` | psql к БД |
+| `make apply-server` | применить порт/настройки HTTPS |
 
-Структура `mobile/lib`:
+## Переменные окружения
 
-```
-core/                 API-клиент, конфигурация, storage, push, провайдеры
-features/auth/        вход, профиль, обновление токенов
-features/clients/     клиенты тренера, карточка клиента, тренировки на сегодня
-features/workouts/    создание/редактирование тренировки
-features/templates/   шаблоны тренировок
-features/progress/    графики веса и упражнений
-features/weights/     замеры веса
-features/nutrition/   рекомендации по питанию
-features/chats/       список чатов и переписка
-features/notifications/ уведомления и FCM-токен
-features/gyms/        мои залы, выбор тренера
-features/settings/    настройки, часовой пояс, адрес сервера
-features/client/      клиентский календарь, тренировка дня, отчёты
-```
+| Переменная | Назначение |
+| --- | --- |
+| `POSTGRES_PASSWORD` | пароль PostgreSQL |
+| `JWT_SECRET` | секрет access-токена (≥32 символов) |
+| `JWT_REFRESH_SECRET` | секрет refresh-токена (≥32 символов) |
+| `DEFAULT_CLIENT_PASSWORD` | начальный пароль клиентов/тренеров |
+| `ADMIN_PHONE`, `ADMIN_PASSWORD` | администратор |
+| `DEFAULT_TIMEZONE` | пояс по умолчанию, `Asia/Novosibirsk` |
+| `REDIS_PASSWORD` | пароль Redis |
+| `CORS_ORIGINS` | разрешённые origin веб-панели |
+| `ENABLE_SWAGGER` | включает Swagger |
+| `FCM_CREDENTIALS_JSON` | сервисный аккаунт Firebase (пусто = push выключен) |
+| `WEB_ADMIN_PORT` | внешний HTTPS-порт (по умолчанию 3000) |
 
-Параметры Android-сборки:
+Секреты хранятся только в `.env`/`secrets/`; `.env`, `ssl/`,
+`server-config/`, `uploads/`, keystore и `key.properties` не коммитятся.
 
-- package / applicationId: `com.gymapp.gym_trainer`;
-- текущая версия: `1.0.2+3` (`versionName 1.0.2`, `versionCode 3`);
-- разрешения: `INTERNET`, `POST_NOTIFICATIONS`;
-- release-сборка пока подписывается debug-ключами.
+## Mobile
 
-## Запуск и сборка mobile
+- Адрес API по умолчанию: `https://demogym.staff-rf.ru:3000`.
+- `/api/v1` добавляется автоматически; в коде хранится только хост.
+- Адрес можно переопределить при сборке через `--dart-define=API_URL=...`.
+- Версия: `1.0.8+9` (`versionName 1.0.8`, `versionCode 9`).
+- applicationId: `com.gymapp.gym_trainer`.
+- Release подписывается release-ключом. Параметры — в
+  `mobile/android/key.properties` (не в git), keystore —
+  `/opt/compose/keyAPP/app-key.keystore`.
+- Инструкция по ключам, PEPK и RuStore: `docs/RUSTORE_KEY.md`.
 
 ```bash
 cd mobile
 flutter pub get
 flutter analyze
 flutter test
-flutter run --dart-define=API_URL=http://<host>:8080/api/v1
+
+flutter build apk --release \
+  --dart-define=API_URL=https://demogym.staff-rf.ru:3000
+flutter build appbundle --release \
+  --dart-define=API_URL=https://demogym.staff-rf.ru:3000
 ```
 
-Release-артефакты:
+Артефакты:
+
+- `mobile/build/app/outputs/flutter-apk/app-release.apk`
+- `mobile/build/app/outputs/bundle/release/app-release.aab`
+
+Проверка подписи и адреса:
 
 ```bash
-flutter build apk --release
-flutter build appbundle --release
+apksigner verify --print-certs \
+  mobile/build/app/outputs/flutter-apk/app-release.apk
+sha256sum mobile/build/app/outputs/flutter-apk/app-release.apk \
+  mobile/build/app/outputs/bundle/release/app-release.aab
 ```
 
-Результаты:
-
-- `mobile/build/app/outputs/flutter-apk/app-release.apk`;
-- `mobile/build/app/outputs/bundle/release/app-release.aab`.
-
-Для Google Play потребуется настроить release keystore.
-
----
-
-# Backend
-
-- Глобальный префикс API: `/api/v1`.
-- Swagger UI: `/api/docs`, OpenAPI JSON: `/api/docs-json` (только при
-  `NODE_ENV != production`).
-- Авторизация: JWT access 15 минут / refresh 30 дней с ротацией.
-- WebSocket чата: namespace `/chat`.
-- При старте в Docker применяются миграции и идемпотентный seed.
-
-Основные модули: auth, gyms, gym-links, equipment, upload, exercises,
-food-products, goals, clients, trainers, client-trainers, trainer-clients,
-weight-measurements, reports, workouts, nutrition, notifications, chats,
-reception, receptions, dashboard, demo.
-
-Ключевые группы маршрутов:
-
-| Префикс | Назначение |
-| --- | --- |
-| `/auth` | вход, refresh, профиль, часовой пояс, push-токен |
-| `/admin/*` | справочники и управление для администратора |
-| `/reception/*` | работа ресепшн с клиентами и тренерами |
-| `/trainer/clients` | клиенты тренера |
-| `/trainer/gyms` | залы тренера |
-| `/trainer/workouts` | тренировки тренера, старт, завершение, результаты |
-| `/trainer/templates` | шаблоны тренировок |
-| `/trainer/nutrition` | рекомендации по питанию |
-| `/client/gyms`, `/client/trainers` | залы и тренеры клиента |
-| `/client/workouts` | тренировки клиента, старт, завершение |
-| `/client/workout-items/:id/result` | результаты упражнений |
-| `/client/nutrition` | питание клиента по дате |
-| `/client/:id/weight-measurements` | замеры веса клиента |
-| `/reports/*` | отчёты по весу, упражнениям, посещаемости и оборудованию |
-| `/chats` | чаты и сообщения |
-| `/notifications` | уведомления |
-
-Схема данных и полное описание API: `docs/er.md`, `docs/api.md`.
-
-## Локальный запуск backend
+## Backend
 
 ```bash
 cd backend
@@ -286,167 +158,71 @@ pnpm start:dev
 pnpm build
 ```
 
----
+- Глобальный префикс: `/api/v1`.
+- JWT: access 15 минут, refresh 30 дней с ротацией.
+- WebSocket чата: namespace `/chat`.
+- Swagger: `/api/docs`, JSON `/api/docs-json`.
+- Кэш и throttler — Redis; при недоступности Redis работает fallback.
 
-# Web-admin
-
-Веб-панель для администратора и ресепшн.
-
-Разделы:
-
-- вход;
-- залы и тренажёры;
-- упражнения и продукты питания;
-- цели;
-- клиенты;
-- тренеры;
-- замеры веса;
-- ресепшн;
-- отчёты (посещаемость, использование оборудования, тренеры);
-- уведомления и чаты;
-- настройки (часовой пояс, демо-данные).
-
-Возможности:
-
-- универсальный поиск по полям таблиц;
-- привязка тренеров и клиентов к залам;
-- назначение тренеров клиентам;
-- просмотр и редактирование карточек;
-- отчёты и выгрузка показателей.
+## Web-admin
 
 ```bash
 cd web-admin
 pnpm install
 pnpm dev
-pnpm build
 pnpm lint
+pnpm build
 ```
 
----
+В production nginx слушает HTTPS :3000, проксирует `/api/`, `/socket.io/`,
+`/uploads/` на backend :8080 и отдаёт SPA.
 
-# Быстрый старт (Docker)
-
-## Требования
-
-- Docker и Docker Compose;
-- Node.js 20+ и pnpm — для локальной разработки;
-- Flutter SDK — для сборки mobile.
-
-## Запуск с нуля
+## Тесты
 
 ```bash
-cp .env.example .env
-nano .env
-make up
+make test                              # backend e2e, БД gym_test
+cd mobile && flutter analyze && flutter test
+cd web-admin && pnpm lint && pnpm build
 ```
 
-`backend` при старте сам применяет миграции (`prisma migrate deploy`) и
-создаёт администратора из `ADMIN_PHONE` / `ADMIN_PASSWORD`
-(`prisma db seed`, идемпотентно).
+E2E используют отдельную БД и не затрагивают рабочую. Полный прогон может быть
+нестабилен из-за длительной очистки демо-данных; для приёмки допускаются
+целевые наборы.
 
-Проверка:
+## Документация
 
-- Backend health: `http://localhost:8080/api/v1/health` → `{"status":"ok"}`;
-- Web-admin: `http://localhost:3000`;
-- Swagger: `http://localhost:8080/api/docs` (если `NODE_ENV != production`).
+- `docs/TZ.md` — техническое задание, план разработки, план приёмки,
+  тест-план, бизнес-правила и реестр дефектов.
+- `docs/er.md` — модель данных.
+- `docs/api.md` — актуальная OpenAPI-спецификация.
+- `docs/RUSTORE_KEY.md` — ключи подписи, PEPK, AAB и CSR для ОС Аврора.
+- `docs/033_*` — задание, план, тесты и результат консолидации документации.
 
-Остановка:
+## Известные ограничения
 
-```bash
-make down
-# с удалением БД:
-docker compose down -v
-```
-
-## Команды Makefile
-
-| Команда | Действие |
-| --- | --- |
-| `make up` | `docker compose up -d --build` |
-| `make down` | остановить и удалить контейнеры |
-| `make migrate` | `prisma migrate deploy` в контейнере backend |
-| `make seed` | `prisma db seed` |
-| `make test` | `pnpm test:e2e` в контейнере backend |
-| `make logs` | логи backend |
-| `make psql` | psql к БД `gym` |
-
-## Переменные окружения
-
-| Переменная | Назначение |
-| --- | --- |
-| `POSTGRES_PASSWORD` | пароль PostgreSQL |
-| `JWT_SECRET` | секрет access-токена (≥32 символов) |
-| `JWT_REFRESH_SECRET` | секрет refresh-токена (≥32 символов) |
-| `DEFAULT_CLIENT_PASSWORD` | начальный пароль клиентов и тренеров |
-| `ADMIN_PHONE`, `ADMIN_PASSWORD` | учётные данные администратора |
-| `DEFAULT_TIMEZONE` | часовой пояс по умолчанию (IANA) |
-| `REDIS_PASSWORD` | пароль Redis |
-| `FCM_CREDENTIALS_JSON` | JSON сервисного аккаунта Firebase (пусто = push выключен) |
+- Push требует реальный сервисный аккаунт Firebase и физическое устройство.
+- Чат рассчитан на один инстанс backend (без Redis pub/sub).
+- Офлайн-режим, оплата и iOS — вне MVP.
+- Restore архивного тренера не предусмотрен.
+- UI-переключатели страниц в web-admin не реализованы (API готов).
+- Новые залы не наполняются дефолтными тренажёрами автоматически.
+- Полный e2e может быть нестабилен из-за демо-очистки.
 
 ## Диагностика
 
 ```bash
 docker compose ps
 docker compose logs -f backend
-docker compose logs -f postgres
 docker compose logs -f web-admin
 ```
 
-Если backend падает с `Invalid environment configuration`, проверьте, что
-заданы `POSTGRES_PASSWORD`, `JWT_SECRET`, `JWT_REFRESH_SECRET`,
-`ADMIN_PHONE`, `ADMIN_PASSWORD`, `DEFAULT_TIMEZONE`, а секреты не начинаются
-с `changeme`.
-
-Если логин в web-admin возвращает `401`, проверьте логи seed и значения
-`ADMIN_PHONE` / `ADMIN_PASSWORD` в `.env`.
-
----
-
-# Тесты
-
-Backend e2e (нужна поднятая БД):
-
-```bash
-make test
-# или
-cd backend && pnpm test:e2e
-```
-
-Mobile:
-
-```bash
-cd mobile && flutter analyze && flutter test
-```
-
-Web-admin:
-
-```bash
-cd web-admin && pnpm lint && pnpm build
-```
+- `Invalid environment configuration` — проверьте обязательные env и что
+  секреты не начинаются с `changeme`.
+- `401` при входе в web-admin — проверьте `ADMIN_PHONE`/`ADMIN_PASSWORD` и
+  логи seed.
+- Ошибка TLS — проверьте сертификат в `ssl/staff-rf` или загруженный в
+  `server-config/tls`, затем `make apply-server`.
 
 ---
 
-# Документация
-
-- `docs/tehzadanie.md` — техническое задание;
-- `docs/er.md` — ER-модель;
-- `docs/api.md` — описание API;
-- `docs/readme.md` — журнал изменений функционала;
-- `docs/<номер>_task_<описание>.md` — постановка задания;
-- `docs/<номер>_plan_<описание>.md` — план работ;
-- `docs/<номер>_tests_<описание>.md` — тесты и результаты;
-- `docs/<номер>_result_<описание>.md` — результат задания;
-- `docs/archive/` — архив ранних документов.
-
----
-
-# Известные ограничения
-
-- Push требует реальный `secrets/fcm.json` (сервисный аккаунт Firebase) и
-  физическое устройство для боевой проверки.
-- Чат рассчитан на один инстанс backend (без Redis pub/sub).
-- Офлайн-режим и оплата — вне MVP.
-- Release-сборка mobile подписана debug-ключами; для Google Play нужен
-  release keystore.
-- UI-smoke на физическом Android-устройстве выполняется вручную: в среде
-  разработки эмулятор недоступен.
+Ноябрь 2026

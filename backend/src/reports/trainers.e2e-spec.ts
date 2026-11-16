@@ -217,25 +217,25 @@ describe('Reports trainers (e2e)', () => {
         },
       });
 
-    await workout('2026-10-01', WorkoutStatus.DONE, clientId, trainerId, gymId);
+    await workout('2026-10-01', WorkoutStatus.COMPLETED, clientId, trainerId, gymId);
     await workout(
       '2026-10-02',
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       otherClientId,
       trainerId,
       gymId,
     );
-    await workout('2026-10-03', WorkoutStatus.DONE, clientId, trainerId, gymId);
+    await workout('2026-10-03', WorkoutStatus.COMPLETED, clientId, trainerId, gymId);
     await workout(
       '2026-10-04',
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       clientId,
       otherTrainerId,
       otherGymId,
     );
     await workout(
       '2026-10-05',
-      WorkoutStatus.SKIPPED,
+      WorkoutStatus.MISSED,
       clientId,
       trainerId,
       gymId,

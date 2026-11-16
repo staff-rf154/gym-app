@@ -12,6 +12,14 @@ const OTHER_TRAINER_PHONE = '+79990000702';
 const CLIENT_PHONE = '+79990000703';
 const OTHER_CLIENT_PHONE = '+79990000704';
 const TEST_PASSWORD = 'TestPass123!';
+const dayKey = (offsetDays: number) => {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+};
+const FIRST_DATE = dayKey(2);
+const SECOND_DATE = dayKey(1);
+const UPDATED_DATE = dayKey(3);
 const PHONES = [
   TRAINER_PHONE,
   OTHER_TRAINER_PHONE,
@@ -307,7 +315,7 @@ describe('Workouts (e2e)', () => {
       .send({
         client_id: clientId,
         gym_id: gymId,
-        date: '2026-11-01',
+        date: FIRST_DATE,
         comment: 'Первая тренировка',
         items: [item()],
       });
@@ -316,7 +324,7 @@ describe('Workouts (e2e)', () => {
     expect(response.body).toMatchObject({
       clientId,
       gymId,
-      date: '2026-11-01',
+      date: FIRST_DATE,
       status: 'PLANNED',
       templateId: null,
       comment: 'Первая тренировка',
@@ -335,7 +343,7 @@ describe('Workouts (e2e)', () => {
       .send({
         client_id: clientId,
         gym_id: gymId,
-        date: '2026-11-05',
+        date: SECOND_DATE,
         template_id: templateId,
         items: template.body.items.map(
           (templateItem: Record<string, unknown>) => ({
@@ -361,7 +369,7 @@ describe('Workouts (e2e)', () => {
       .send({
         client_id: otherClientId,
         gym_id: gymId,
-        date: '2026-11-07',
+        date: dayKey(4),
         items: [item()],
       });
 
@@ -374,7 +382,7 @@ describe('Workouts (e2e)', () => {
       .send({
         client_id: clientId,
         gym_id: gymId,
-        date: '2026-11-07',
+        date: dayKey(4),
         items: [
           item({ exerciseId: '00000000-0000-4000-8000-000000000000' }),
         ],
@@ -389,7 +397,7 @@ describe('Workouts (e2e)', () => {
       .send({
         client_id: clientId,
         gym_id: gymId,
-        date: '2026-11-08',
+        date: dayKey(5),
         items: [item()],
       });
 
@@ -402,7 +410,7 @@ describe('Workouts (e2e)', () => {
       .send({
         client_id: clientId,
         gym_id: gymId,
-        date: '2026-11-10',
+        date: UPDATED_DATE,
         comment: 'Обновлённая тренировка',
         items: [item({ plannedWeight: 45, plannedSets: 4 })],
       });
@@ -410,7 +418,7 @@ describe('Workouts (e2e)', () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       id: workoutId,
-      date: '2026-11-10',
+      date: UPDATED_DATE,
       comment: 'Обновлённая тренировка',
     });
     expect(response.body.items).toHaveLength(1);
@@ -424,7 +432,7 @@ describe('Workouts (e2e)', () => {
       .send({
         client_id: clientId,
         gym_id: gymId,
-        date: '2026-11-11',
+        date: dayKey(6),
         items: [item()],
       });
 
@@ -450,7 +458,7 @@ describe('Workouts (e2e)', () => {
 
   it('GET /trainer/workouts?from=&to= фильтрует по дате', async () => {
     const response = await authed(trainerToken).get(
-      '/trainer/workouts?from=2026-11-09&to=2026-11-30',
+      `/trainer/workouts?from=${FIRST_DATE}&to=${dayKey(30)}`,
     );
 
     expect(response.status).toBe(200);
@@ -479,7 +487,7 @@ describe('Workouts (e2e)', () => {
 
   it('GET /client/workouts?from=&to= возвращает тренировки клиента', async () => {
     const response = await authed(clientToken).get(
-      '/client/workouts?from=2026-11-01&to=2026-11-30',
+      `/client/workouts?from=${SECOND_DATE}&to=${dayKey(30)}`,
     );
 
     expect(response.status).toBe(200);

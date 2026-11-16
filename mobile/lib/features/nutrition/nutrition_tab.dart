@@ -27,6 +27,33 @@ class NutritionTab extends ConsumerWidget {
     }
   }
 
+  Future<void> _archive(
+    BuildContext context,
+    WidgetRef ref,
+    NutritionRecommendation item,
+    bool cancel,
+  ) async {
+    try {
+      final api = ref.read(nutritionApiProvider);
+      if (cancel) {
+        await api.cancel(item.id);
+      } else {
+        await api.archive(item.id);
+      }
+      ref.invalidate(clientNutritionProvider(client.id));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(cancel ? 'Назначение отменено' : 'В архив')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(apiErrorMessage(error))));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recommendations = ref.watch(clientNutritionProvider(client.id));
@@ -63,9 +90,30 @@ class NutritionTab extends ConsumerWidget {
                     ),
                   )
                 : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final item in value)
-                        _RecommendationCard(recommendation: item),
+                      if (value.any((item) => item.isActive)) ...[
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(4, 0, 4, 6),
+                          child: Text('Активные'),
+                        ),
+                        for (final item in value.where((item) => item.isActive))
+                          _RecommendationCard(
+                            recommendation: item,
+                            onCancel: () =>
+                                _archive(context, ref, item, true),
+                            onArchive: () =>
+                                _archive(context, ref, item, false),
+                          ),
+                      ],
+                      if (value.any((item) => !item.isActive)) ...[
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(4, 12, 4, 6),
+                          child: Text('Архив'),
+                        ),
+                        for (final item in value.where((item) => !item.isActive))
+                          _RecommendationCard(recommendation: item),
+                      ],
                     ],
                   ),
           AsyncError(:final error) => Card(
@@ -96,9 +144,15 @@ class NutritionTab extends ConsumerWidget {
 }
 
 class _RecommendationCard extends StatelessWidget {
-  const _RecommendationCard({required this.recommendation});
+  const _RecommendationCard({
+    required this.recommendation,
+    this.onCancel,
+    this.onArchive,
+  });
 
   final NutritionRecommendation recommendation;
+  final VoidCallback? onCancel;
+  final VoidCallback? onArchive;
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +160,9 @@ class _RecommendationCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: recommendation.isActive
+          ? null
+          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -127,6 +184,24 @@ class _RecommendationCard extends StatelessWidget {
                 recommendation.comment!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(recommendation.comment!),
+            ],
+            if (onCancel != null || onArchive != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (onCancel != null)
+                    TextButton(
+                      onPressed: onCancel,
+                      child: const Text('Отменить'),
+                    ),
+                  if (onArchive != null)
+                    OutlinedButton(
+                      onPressed: onArchive,
+                      child: const Text('В архив'),
+                    ),
+                ],
+              ),
             ],
           ],
         ),

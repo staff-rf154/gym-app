@@ -273,6 +273,7 @@ describe('Notifications FCM dispatch (e2e)', () => {
       [pushClientUserId],
       expect.stringContaining(TITLE_PREFIX),
       'Проверка FCM-диспетчеризации',
+      { type: 'SYSTEM' },
     );
 
     const recipients = await prisma.notificationRecipient.findMany({

@@ -1,6 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Role } from '@prisma/client';
+import { Role, WorkoutStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { AddressInfo } from 'node:net';
 import { IoAdapter } from '@nestjs/platform-socket.io';
@@ -129,6 +129,15 @@ describe('Chat WebSocket (e2e)', () => {
 
     prisma = app.get(PrismaService);
 
+    await prisma.workoutItemResult.deleteMany({
+      where: { item: { workout: { client: { user: { phone: { in: PHONES } } } } } },
+    });
+    await prisma.workoutItem.deleteMany({
+      where: { workout: { client: { user: { phone: { in: PHONES } } } } },
+    });
+    await prisma.workout.deleteMany({
+      where: { client: { user: { phone: { in: PHONES } } } },
+    });
     await prisma.message.deleteMany({
       where: { chat: { OR: [{ client: { user: { phone: { in: PHONES } } } }, { trainer: { user: { phone: { in: PHONES } } } }] } },
     });
@@ -210,6 +219,18 @@ describe('Chat WebSocket (e2e)', () => {
       data: { clientId, trainerId, gymId: gym.id },
     });
 
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    await prisma.workout.create({
+      data: {
+        clientId,
+        trainerId,
+        gymId: gym.id,
+        date: new Date(`${tomorrow.toISOString().slice(0, 10)}T00:00:00.000Z`),
+        status: WorkoutStatus.PLANNED,
+      },
+    });
+
     chatId = (
       await prisma.chat.create({
         data: { type: 'CLIENT_TRAINER', clientId, trainerId },
@@ -235,6 +256,11 @@ describe('Chat WebSocket (e2e)', () => {
   afterAll(async () => {
     trainerSocket?.close();
     clientSocket?.close();
+    await prisma.workoutItemResult.deleteMany({
+      where: { item: { workout: { clientId } } },
+    });
+    await prisma.workoutItem.deleteMany({ where: { workout: { clientId } } });
+    await prisma.workout.deleteMany({ where: { clientId } });
     await prisma.message.deleteMany({
       where: { chatId: { in: [chatId, foreignChatId] } },
     });

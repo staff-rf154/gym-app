@@ -4,8 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { NutritionRecommendation, Prisma } from '@prisma/client';
+import {
+  NotificationType,
+  NutritionRecommendation,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ClientNutritionQueryDto } from './dto/client-nutrition-query.dto';
 import { CreateNutritionDto } from './dto/create-nutrition.dto';
 import { TrainerNutritionQueryDto } from './dto/trainer-nutrition-query.dto';
@@ -22,7 +27,10 @@ function todayInTimezone(timezone: string): string {
 
 @Injectable()
 export class NutritionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async create(
     userId: string,
@@ -57,7 +65,7 @@ export class NutritionService {
       throw new BadRequestException('validFrom must be less than or equal to validTo');
     }
 
-    return this.prisma.nutritionRecommendation.create({
+    const created = await this.prisma.nutritionRecommendation.create({
       data: {
         clientId: dto.client_id,
         trainerId: trainer.id,
@@ -69,6 +77,53 @@ export class NutritionService {
         comment: dto.comment,
         validFrom,
         validTo,
+      },
+    });
+
+    void this.notificationsService.createEvent({
+      recipientIds: [client.userId],
+      senderId: trainer.userId,
+      type: NotificationType.NUTRITION,
+      entityId: created.id,
+      title: 'Назначено питание',
+      body: 'Тренер назначил новую рекомендацию по питанию.',
+    });
+
+    return created;
+  }
+
+  async archive(userId: string, id: string): Promise<NutritionRecommendation> {
+    return this.setArchived(userId, id, true);
+  }
+
+  async cancel(userId: string, id: string): Promise<NutritionRecommendation> {
+    return this.setArchived(userId, id, true);
+  }
+
+  private async setArchived(
+    userId: string,
+    id: string,
+    archived: boolean,
+  ): Promise<NutritionRecommendation> {
+    const trainer = await this.prisma.trainer.findUnique({ where: { userId } });
+
+    if (!trainer) {
+      throw new ForbiddenException('Trainer profile not found');
+    }
+
+    const recommendation = await this.prisma.nutritionRecommendation.findUnique({
+      where: { id },
+    });
+
+    if (!recommendation || recommendation.trainerId !== trainer.id) {
+      throw new NotFoundException('Nutrition recommendation not found');
+    }
+
+    return this.prisma.nutritionRecommendation.update({
+      where: { id },
+      data: {
+        isActive: !archived,
+        archivedAt: archived ? new Date() : null,
       },
     });
   }
@@ -96,7 +151,7 @@ export class NutritionService {
     }
 
     return this.prisma.nutritionRecommendation.findMany({
-      where: { clientId: query.client_id },
+      where: { clientId: query.client_id, trainerId: trainer.id },
       orderBy: { createdAt: 'desc' },
     });
   }

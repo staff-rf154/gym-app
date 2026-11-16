@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/utils/timezone.dart';
+import '../auth/auth_controller.dart';
 import 'client_workout_models.dart';
 import 'client_workouts_providers.dart';
 import 'workout_execution.dart';
@@ -195,6 +197,11 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
       return;
     }
 
+    if (workout.isLocked) {
+      setState(() => _steps[workout.id] = target);
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       final saved = await _persistItem(workout, workout.items[step].id);
@@ -223,6 +230,8 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
     final theme = Theme.of(context);
     final dateLabel = DateFormat('dd.MM.yyyy').format(widget.date);
     final busy = _saving || _actionWorkoutId != null;
+    final timezone = ref.watch(authControllerProvider).value?.timezone ?? 'UTC';
+    final today = todayKey(timezone);
 
     return Scaffold(
       appBar: AppBar(title: Text('Тренировка · $dateLabel')),
@@ -233,7 +242,10 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
             _WorkoutHeader(
               workout: workout,
               busy: busy,
-              onStart: workout.canStart ? () => _start(workout) : null,
+              timezone: timezone,
+              onStart: workout.canStart && workout.date.compareTo(today) >= 0
+                  ? () => _start(workout)
+                  : null,
               onFinish: workout.isInProgress ? () => _finish(workout) : null,
             ),
             const SizedBox(height: 8),
@@ -255,14 +267,15 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
                 onFinish: () => _finish(workout),
               )
             else
-              for (final item in workout.items) ...[
-                WorkoutItemCard(
-                  item: item,
-                  controllers: _controllers[item.id]!,
-                  enabled: false,
-                ),
-                const SizedBox(height: 10),
-              ],
+              WorkoutStepView(
+                workout: workout,
+                stepIndex: _steps[workout.id] ?? 0,
+                controllers: _controllers,
+                editable: false,
+                onDoneChanged: _setDone,
+                onBack: () => _moveStep(workout, -1),
+                onNext: () => _moveStep(workout, 1),
+              ),
             const SizedBox(height: 8),
           ],
           if (_workouts.isEmpty)
@@ -288,12 +301,14 @@ class _WorkoutHeader extends StatelessWidget {
   const _WorkoutHeader({
     required this.workout,
     required this.busy,
+    required this.timezone,
     this.onStart,
     this.onFinish,
   });
 
   final ClientWorkout workout;
   final bool busy;
+  final String timezone;
   final VoidCallback? onStart;
   final VoidCallback? onFinish;
 
@@ -322,6 +337,19 @@ class _WorkoutHeader extends StatelessWidget {
                 ),
               ],
             ),
+            if (workout.startTime != null) ...[
+              const SizedBox(height: 4),
+              Text('Время: ${workout.timeLabel}', style: theme.textTheme.bodySmall),
+            ],
+            if (workout.isInProgress && workout.autoFinishAt != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Автозакрытие: ${formatDateTimeInTimezone(workout.autoFinishAt, timezone)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.tertiary,
+                ),
+              ),
+            ],
             if (workout.comment != null && workout.comment!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(workout.comment!, style: theme.textTheme.bodyMedium),
@@ -336,7 +364,7 @@ class _WorkoutHeader extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: busy ? null : onStart,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Начать тренировку'),
+                      label: const Text('Приступить'),
                     ),
                   if (onFinish != null)
                     FilledButton.tonalIcon(
@@ -345,13 +373,6 @@ class _WorkoutHeader extends StatelessWidget {
                       label: const Text('Закончить тренировку'),
                     ),
                 ],
-              ),
-            ],
-            if (workout.isLocked) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Результаты завершённой тренировки доступны только для чтения.',
-                style: theme.textTheme.bodySmall,
               ),
             ],
           ],

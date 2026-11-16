@@ -5,15 +5,24 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
 import '../client/client_workout_models.dart';
+import '../clients/clients_providers.dart';
 import '../clients/trainer_client.dart';
 import 'workout_models.dart';
 import 'workouts_providers.dart';
 
 class WorkoutBuilderScreen extends ConsumerStatefulWidget {
-  const WorkoutBuilderScreen({super.key, required this.client, this.workout});
+  const WorkoutBuilderScreen({
+    super.key,
+    this.client,
+    this.workout,
+    this.initialDate,
+    this.initialClientId,
+  });
 
-  final TrainerClient client;
+  final TrainerClient? client;
   final ClientWorkout? workout;
+  final DateTime? initialDate;
+  final String? initialClientId;
 
   @override
   ConsumerState<WorkoutBuilderScreen> createState() =>
@@ -27,6 +36,8 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
 
   String? _gymId;
   String? _templateId;
+  TrainerClient? _client;
+  String? _startTime;
   late DateTime _date;
   bool _submitting = false;
 
@@ -36,10 +47,12 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
   void initState() {
     super.initState();
     final workout = widget.workout;
+    _client = widget.client;
     _commentController = TextEditingController(text: workout?.comment ?? '');
     _gymId = workout?.gymId;
     _templateId = workout?.templateId;
-    _date = workout?.dateTime ?? DateTime.now();
+    _startTime = workout?.startTime;
+    _date = workout?.dateTime ?? widget.initialDate ?? DateTime.now();
 
     if (workout != null) {
       for (final item in workout.items) {
@@ -119,10 +132,12 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
   }
 
   Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date,
-      firstDate: DateTime(2020),
+      initialDate: _date.isBefore(today) ? today : _date,
+      firstDate: today,
       lastDate: DateTime(2100),
     );
     if (picked != null) {
@@ -130,7 +145,92 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
     }
   }
 
+  Future<void> _pickTime() async {
+    final initial = _startTime == null
+        ? TimeOfDay.now()
+        : TimeOfDay(
+            hour: int.parse(_startTime!.split(':').first),
+            minute: int.parse(_startTime!.split(':').last),
+          );
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked != null) {
+      setState(() {
+        _startTime =
+            '${picked.hour.toString().padLeft(2, '0')}:'
+            '${picked.minute.toString().padLeft(2, '0')}';
+      });
+    }
+  }
+
+  Future<void> _pickClient(List<TrainerClient> clients) async {
+    var query = '';
+    final selected = await showModalBottomSheet<TrainerClient>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final filtered = clients
+                .where(
+                  (client) =>
+                      client.name.toLowerCase().contains(query.toLowerCase()),
+                )
+                .toList();
+            return SafeArea(
+              child: SizedBox(
+                height: MediaQuery.sizeOf(context).height * 0.75,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: TextField(
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Поиск клиента по ФИО',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (value) =>
+                            setSheetState(() => query = value.trim()),
+                      ),
+                    ),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('Ничего не найдено'))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final client = filtered[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    child: Text(client.initials),
+                                  ),
+                                  title: Text(client.name),
+                                  onTap: () =>
+                                      Navigator.of(context).pop(client),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (selected != null) {
+      setState(() => _client = selected);
+    }
+  }
+
   Future<void> _submit(List<Exercise> exercises) async {
+    if (_client == null) {
+      _showError('Выберите клиента');
+      return;
+    }
     if (_gymId == null) {
       _showError('Выберите зал');
       return;
@@ -185,25 +285,27 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
       final workout = widget.workout;
       if (workout == null) {
         await api.createWorkout(
-          clientId: widget.client.id,
+          clientId: _client!.id,
           gymId: _gymId!,
           date: DateFormat('yyyy-MM-dd').format(_date),
           templateId: _templateId,
           comment: comment.isEmpty ? null : comment,
+          startTime: _startTime,
           items: items,
         );
       } else {
         await api.updateWorkout(
           id: workout.id,
-          clientId: widget.client.id,
+          clientId: _client!.id,
           gymId: _gymId!,
           date: DateFormat('yyyy-MM-dd').format(_date),
           templateId: _templateId,
           comment: comment.isEmpty ? null : comment,
+          startTime: _startTime,
           items: items,
         );
       }
-      ref.invalidate(trainerClientWorkoutsProvider(widget.client.id));
+      ref.invalidate(trainerClientWorkoutsProvider(_client!.id));
       if (workout != null) {
         ref.invalidate(trainerWorkoutProvider(workout.id));
       }
@@ -230,15 +332,22 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
     final gyms = ref.watch(gymsProvider);
     final exercises = ref.watch(exercisesProvider);
     final templates = ref.watch(templatesProvider);
+    final clients = widget.client == null
+        ? ref.watch(myClientsProvider)
+        : null;
 
-    if (gyms.isLoading || exercises.isLoading || templates.isLoading) {
+    if (gyms.isLoading ||
+        exercises.isLoading ||
+        templates.isLoading ||
+        (clients?.isLoading ?? false)) {
       return Scaffold(
         appBar: AppBar(title: Text(_title)),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
-    final error = gyms.error ?? exercises.error ?? templates.error;
+    final error =
+        gyms.error ?? exercises.error ?? templates.error ?? clients?.error;
     if (error != null) {
       return Scaffold(
         appBar: AppBar(title: Text(_title)),
@@ -268,6 +377,7 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
     final gymList = gyms.requireValue;
     final exerciseList = exercises.requireValue;
     final templateList = templates.requireValue;
+    final clientList = clients?.requireValue ?? const <TrainerClient>[];
     final equipmentList = _gymId == null
         ? const <GymEquipment>[]
         : switch (ref.watch(gymEquipmentProvider(_gymId!))) {
@@ -276,10 +386,29 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
           };
 
     return Scaffold(
-      appBar: AppBar(title: Text('$_title · ${widget.client.name}')),
+      appBar: AppBar(
+        title: Text(
+          _client == null ? _title : '$_title · ${_client!.name}',
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
+          if (widget.client == null) ...[
+            _SectionTitle('Клиент'),
+            Card(
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Text(_client?.name ?? 'Выберите клиента'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _submitting
+                    ? null
+                    : () => _pickClient(clientList),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
           _SectionTitle('Зал'),
           DropdownButtonFormField<String>(
             initialValue: _gymId,
@@ -332,6 +461,27 @@ class _WorkoutBuilderScreenState extends ConsumerState<WorkoutBuilderScreen> {
             onPressed: _submitting ? null : _pickDate,
             icon: const Icon(Icons.calendar_today_outlined),
             label: Text(DateFormat('dd.MM.yyyy').format(_date)),
+          ),
+          const SizedBox(height: 8),
+          _SectionTitle('Время начала (необязательно)'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _submitting ? null : _pickTime,
+                  icon: const Icon(Icons.schedule),
+                  label: Text(_startTime ?? 'Не задано'),
+                ),
+              ),
+              if (_startTime != null)
+                IconButton(
+                  onPressed: _submitting
+                      ? null
+                      : () => setState(() => _startTime = null),
+                  icon: const Icon(Icons.clear),
+                  tooltip: 'Очистить время',
+                ),
+            ],
           ),
           const SizedBox(height: 20),
           _SectionTitle('Упражнения'),

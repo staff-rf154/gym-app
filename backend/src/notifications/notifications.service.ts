@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Notification, Role } from '@prisma/client';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Notification, NotificationType, Role } from '@prisma/client';
 import {
   PaginatedResponse,
   PaginationQueryDto,
@@ -11,6 +11,8 @@ import { PushService } from './push.service';
 export interface NotificationResponse {
   id: string;
   gymId: string | null;
+  type: NotificationType;
+  entityId: string | null;
   title: string;
   body: string;
   senderId: string;
@@ -18,8 +20,20 @@ export interface NotificationResponse {
   readAt: Date | null;
 }
 
+export interface NotificationEventInput {
+  recipientIds: string[];
+  senderId: string;
+  type: NotificationType;
+  entityId?: string | null;
+  title: string;
+  body: string;
+  gymId?: string | null;
+}
+
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly pushService: PushService,
@@ -43,40 +57,62 @@ export class NotificationsService {
       ? (
           await this.prisma.clientTrainer.findMany({
             where: { gymId, isActive: true },
-            select: {
-              client: {
-                select: {
-                  userId: true,
-                  user: { select: { pushToken: true } },
-                },
-              },
-            },
+            select: { client: { select: { userId: true } } },
           })
-        ).map((link) => ({
-          id: link.client.userId,
-          pushToken: link.client.user.pushToken,
-        }))
-      : await this.prisma.user.findMany({
-          where: { role: Role.CLIENT },
-          select: { id: true, pushToken: true },
-        });
+        ).map((link) => link.client.userId)
+      : (
+          await this.prisma.user.findMany({
+            where: { role: Role.CLIENT },
+            select: { id: true },
+          })
+        ).map((user) => user.id);
 
-    const recipients = [
-      ...new Map(
-        rawRecipients.map((recipient) => [recipient.id, recipient]),
-      ).values(),
-    ];
+    return this.persist({
+      recipientIds: rawRecipients,
+      senderId,
+      type: NotificationType.SYSTEM,
+      title: dto.title,
+      body: dto.body,
+      gymId,
+    });
+  }
+
+  async createEvent(
+    input: NotificationEventInput,
+  ): Promise<NotificationResponse | null> {
+    try {
+      return await this.persist(input);
+    } catch (error) {
+      this.logger.error(
+        `Failed to persist notification event ${input.type}`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  private async persist(
+    input: NotificationEventInput,
+  ): Promise<NotificationResponse> {
+    const recipientIds = [...new Set(input.recipientIds)].filter(Boolean);
 
     const notification = await this.prisma.$transaction(async (tx) => {
       const created = await tx.notification.create({
-        data: { gymId, title: dto.title, body: dto.body, senderId },
+        data: {
+          gymId: input.gymId ?? null,
+          type: input.type,
+          entityId: input.entityId ?? null,
+          title: input.title,
+          body: input.body,
+          senderId: input.senderId,
+        },
       });
 
-      if (recipients.length > 0) {
+      if (recipientIds.length > 0) {
         await tx.notificationRecipient.createMany({
-          data: recipients.map((recipient) => ({
+          data: recipientIds.map((userId) => ({
             notificationId: created.id,
-            userId: recipient.id,
+            userId,
           })),
         });
       }
@@ -84,12 +120,23 @@ export class NotificationsService {
       return created;
     });
 
-    const pushUserIds = recipients
-      .filter((recipient) => Boolean(recipient.pushToken))
-      .map((recipient) => recipient.id);
+    if (recipientIds.length > 0) {
+      const pushRecipients = await this.prisma.user.findMany({
+        where: { id: { in: recipientIds }, pushToken: { not: null } },
+        select: { id: true },
+      });
 
-    if (pushUserIds.length > 0) {
-      void this.pushService.sendToUsers(pushUserIds, dto.title, dto.body);
+      if (pushRecipients.length > 0) {
+        void this.pushService.sendToUsers(
+          pushRecipients.map((user) => user.id),
+          input.title,
+          input.body,
+          {
+            type: input.type,
+            ...(input.entityId ? { entityId: input.entityId } : {}),
+          },
+        );
+      }
     }
 
     return this.toResponse(notification, null);
@@ -137,6 +184,8 @@ export class NotificationsService {
     return {
       id: notification.id,
       gymId: notification.gymId,
+      type: notification.type,
+      entityId: notification.entityId,
       title: notification.title,
       body: notification.body,
       senderId: notification.senderId,

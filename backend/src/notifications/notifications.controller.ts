@@ -40,7 +40,7 @@ export class NotificationsController {
   }
 
   @Get('notifications')
-  @Roles(Role.CLIENT)
+  @Roles(Role.CLIENT, Role.TRAINER, Role.ADMIN, Role.RECEPTION)
   @ApiOperation({ summary: 'Мои уведомления' })
   findAll(
     @CurrentUser('userId') userId: string,
@@ -50,7 +50,7 @@ export class NotificationsController {
   }
 
   @Post('notifications/:id/read')
-  @Roles(Role.CLIENT)
+  @Roles(Role.CLIENT, Role.TRAINER, Role.ADMIN, Role.RECEPTION)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Отметить уведомление прочитанным' })
   async markRead(

@@ -74,9 +74,13 @@ services:
       ENABLE_SWAGGER: ${ENABLE_SWAGGER:-true}
       FCM_CREDENTIALS_JSON: ${FCM_CREDENTIALS_JSON:-}
       PORT: "8080"
+      SERVER_CONFIG_DIR: /app/server-config
+      SSL_DIR: /app/ssl
     volumes:
       - ./uploads:/app/uploads
       - ./secrets:/app/secrets:ro
+      - ./server-config:/app/server-config
+      - ./ssl:/app/ssl:ro
 
   web-admin:
     build: ./web-admin
@@ -88,13 +92,16 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1",
+          "P=$$(grep -o 'listen [0-9]*' /etc/nginx/conf.d/default.conf | grep -o '[0-9]*' | head -n1); curl -fsSk -o /dev/null https://127.0.0.1:$${P:-3000}/ || exit 1",
         ]
       interval: 10s
       timeout: 5s
       retries: 5
     ports:
-      - "3000:80"
+      - "${WEB_ADMIN_PORT:-3000}:${WEB_ADMIN_PORT:-3000}"
+    volumes:
+      - ./server-config:/etc/nginx/server-config
+      - ./ssl:/etc/nginx/ssl:ro
 
 volumes:
   pgdata:

@@ -5,6 +5,8 @@ build/
 .env
 secrets/
 uploads/
+server-config/
+ssl/
 *.log
 .DS_Store
 

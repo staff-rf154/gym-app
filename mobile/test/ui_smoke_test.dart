@@ -18,6 +18,7 @@ import 'package:gym_trainer/features/client/client_workout_models.dart';
 import 'package:gym_trainer/features/client/client_workouts_api.dart';
 import 'package:gym_trainer/features/client/client_workouts_providers.dart';
 import 'package:gym_trainer/features/client/workout_day_screen.dart';
+import 'package:gym_trainer/features/client/workout_view_screen.dart';
 import 'package:gym_trainer/features/notifications/notification_api.dart';
 import 'package:gym_trainer/features/notifications/notification_models.dart';
 import 'package:gym_trainer/features/notifications/notification_providers.dart';
@@ -176,8 +177,10 @@ class _FakeChatApi extends ChatApi {
   Future<List<ChatSummary>> fetchChats() async => chats;
 
   @override
-  Future<List<ChatMessage>> fetchMessages(String chatId, {int limit = 50}) async =>
-      messages;
+  Future<List<ChatMessage>> fetchMessages(
+    String chatId, {
+    int limit = 50,
+  }) async => messages;
 
   @override
   Future<ChatMessage> sendMessage(String chatId, String text) async {
@@ -312,7 +315,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Начать тренировку'), findsOneWidget);
+    expect(find.text('Приступить'), findsOneWidget);
     expect(find.text('Сохранить результаты'), findsNothing);
 
     final fields = tester.widgetList<TextField>(find.byType(TextField));
@@ -321,7 +324,7 @@ void main() {
   });
 
   testWidgets('M16: завершённая тренировка только для чтения', (tester) async {
-    final workout = _workout(DateTime.now(), status: 'DONE');
+    final workout = _workout(DateTime.now(), status: 'COMPLETED');
     final api = _FakeClientWorkoutsApi();
 
     final container = ProviderContainer(
@@ -337,10 +340,136 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Выполнена'), findsOneWidget);
-    expect(find.text('Начать тренировку'), findsNothing);
+    expect(find.text('Завершена'), findsOneWidget);
+    expect(find.text('Приступить'), findsNothing);
     expect(find.text('Сохранить результаты'), findsNothing);
-    expect(find.textContaining('только для чтения'), findsOneWidget);
+    expect(find.text('Закончить тренировку'), findsNothing);
+    expect(find.textContaining('только для чтения'), findsNothing);
+    expect(find.text('Упражнение 1 из 1'), findsOneWidget);
+
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(fields, isNotEmpty);
+    expect(fields.every((field) => field.enabled == false), isTrue);
+  });
+
+  testWidgets('M17: завершённая тренировка листается без сохранения', (
+    tester,
+  ) async {
+    final workout = ClientWorkout(
+      id: 'workout-2',
+      clientId: _clientUser.userId,
+      gymId: 'gym-1',
+      date: _dateKey(DateTime.now()),
+      status: 'COMPLETED',
+      items: const [
+        ClientWorkoutItem(
+          id: 'item-1',
+          exerciseId: 'exercise-1',
+          exerciseName: 'Жим лёжа',
+          plannedWeight: 80,
+          plannedSets: 4,
+          plannedReps: 8,
+          order: 1,
+        ),
+        ClientWorkoutItem(
+          id: 'item-2',
+          exerciseId: 'exercise-2',
+          exerciseName: 'Присед',
+          plannedWeight: 100,
+          plannedSets: 3,
+          plannedReps: 6,
+          order: 2,
+        ),
+      ],
+    );
+    final api = _FakeClientWorkoutsApi();
+
+    final container = ProviderContainer(
+      overrides: [clientWorkoutsApiProvider.overrideWithValue(api)],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      _app(
+        container,
+        WorkoutDayScreen(date: DateTime.now(), workouts: [workout]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Жим лёжа'), findsOneWidget);
+    expect(find.text('Далее'), findsOneWidget);
+    expect(find.text('Закончить тренировку'), findsNothing);
+
+    await tester.tap(find.text('Далее'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Присед'), findsOneWidget);
+    expect(find.text('Упражнение 2 из 2'), findsOneWidget);
+    expect(find.text('Далее'), findsNothing);
+    expect(find.text('Закончить тренировку'), findsNothing);
+    expect(api.savedResults, isEmpty);
+
+    await tester.tap(find.text('Назад'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Жим лёжа'), findsOneWidget);
+    expect(api.savedResults, isEmpty);
+  });
+
+  testWidgets('M18: единый экран просмотра тренировки read-only', (
+    tester,
+  ) async {
+    final workout = ClientWorkout(
+      id: 'workout-3',
+      clientId: _clientUser.userId,
+      gymId: 'gym-1',
+      gymName: 'Зал на Ленина',
+      date: _dateKey(DateTime.now()),
+      status: 'AUTO_CLOSED',
+      items: const [
+        ClientWorkoutItem(
+          id: 'item-1',
+          exerciseId: 'exercise-1',
+          exerciseName: 'Жим лёжа',
+          plannedWeight: 80,
+          plannedSets: 4,
+          plannedReps: 8,
+          order: 1,
+        ),
+        ClientWorkoutItem(
+          id: 'item-2',
+          exerciseId: 'exercise-2',
+          exerciseName: 'Присед',
+          plannedWeight: 100,
+          plannedSets: 3,
+          plannedReps: 6,
+          order: 2,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: WorkoutViewScreen(workout: workout)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Зал на Ленина'), findsOneWidget);
+    expect(find.text('Жим лёжа'), findsOneWidget);
+    expect(find.text('Сохранить результаты'), findsNothing);
+    expect(find.text('Закончить тренировку'), findsNothing);
+
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(fields, isNotEmpty);
+    expect(fields.every((field) => field.enabled == false), isTrue);
+
+    await tester.tap(find.text('Далее'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Присед'), findsOneWidget);
+    expect(find.text('Упражнение 2 из 2'), findsOneWidget);
+    expect(find.text('Далее'), findsNothing);
+    expect(find.text('Закончить тренировку'), findsNothing);
   });
 
   testWidgets('M10: питание от тренера отображается на клиенте', (
@@ -529,14 +658,15 @@ void main() {
 
     expect(find.text('Напоминание'), findsOneWidget);
     expect(find.text('Тренировка завтра в 18:00'), findsOneWidget);
-    expect(find.byIcon(Icons.notifications_active), findsOneWidget);
+    expect(find.byIcon(Icons.notifications_none), findsOneWidget);
+    expect(find.byIcon(Icons.mark_email_unread_outlined), findsOneWidget);
 
     await tester.tap(find.text('Напоминание'));
     await tester.pumpAndSettle();
 
     expect(api.markedRead, contains('notification-1'));
     expect(find.byIcon(Icons.done_all), findsOneWidget);
-    expect(find.byIcon(Icons.notifications_active), findsNothing);
+    expect(find.byIcon(Icons.mark_email_unread_outlined), findsNothing);
   });
 
   testWidgets('M14: смена часового пояса сохраняется', (tester) async {

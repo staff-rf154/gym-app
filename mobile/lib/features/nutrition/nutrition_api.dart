@@ -39,6 +39,14 @@ class NutritionApi {
     return NutritionRecommendation.fromJson(response.data!);
   }
 
+  Future<void> archive(String id) async {
+    await _apiClient.dio.post<void>('/trainer/nutrition/$id/archive');
+  }
+
+  Future<void> cancel(String id) async {
+    await _apiClient.dio.post<void>('/trainer/nutrition/$id/cancel');
+  }
+
   static String _formatDate(DateTime value) {
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');

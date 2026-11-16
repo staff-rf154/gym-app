@@ -178,6 +178,7 @@ export class ReportsService {
     query: WeightDynamicsQueryDto,
   ): Promise<WeightDynamicsPoint[]> {
     const clientId = await this.resolveClientId(userId, role, query.client_id);
+    const trainerId = await this.resolveTrainerId(userId, role);
 
     const measuredAt: Prisma.DateTimeFilter = {};
 
@@ -192,6 +193,7 @@ export class ReportsService {
     const measurements = await this.prisma.weightMeasurement.findMany({
       where: {
         clientId,
+        ...(trainerId ? { measuredBy: userId } : {}),
         measuredAt: Object.keys(measuredAt).length ? measuredAt : undefined,
       },
       orderBy: { measuredAt: 'asc' },
@@ -222,6 +224,7 @@ export class ReportsService {
     query: ExerciseProgressQueryDto,
   ): Promise<ExerciseProgressResponse> {
     const clientId = await this.resolveClientId(userId, role, query.client_id);
+    const trainerId = await this.resolveTrainerId(userId, role);
 
     const exercise = await this.prisma.exercise.findUnique({
       where: { id: query.exercise_id },
@@ -234,7 +237,7 @@ export class ReportsService {
     const items = await this.prisma.workoutItem.findMany({
       where: {
         exerciseId: query.exercise_id,
-        workout: { clientId },
+        workout: { clientId, ...(trainerId ? { trainerId } : {}) },
       },
       include: {
         workout: { select: { date: true } },
@@ -280,9 +283,10 @@ export class ReportsService {
     query: ExercisesSummaryQueryDto,
   ): Promise<ExerciseSummaryItem[]> {
     const clientId = await this.resolveClientId(userId, role, query.client_id);
+    const trainerId = await this.resolveTrainerId(userId, role);
 
     const items = await this.prisma.workoutItem.findMany({
-      where: { workout: { clientId } },
+      where: { workout: { clientId, ...(trainerId ? { trainerId } : {}) } },
       include: {
         exercise: { select: { id: true, name: true } },
         workout: { select: { date: true } },
@@ -339,7 +343,7 @@ export class ReportsService {
     this.assertPeriod(query.from, query.to);
     const groupBy = query.group_by ?? 'day';
     const where: Prisma.WorkoutWhereInput = {
-      status: WorkoutStatus.DONE,
+      status: { in: [WorkoutStatus.COMPLETED, WorkoutStatus.AUTO_CLOSED] },
       date: this.buildDateFilter(query.from, query.to),
       ...(scope.gymId ? { gymId: scope.gymId } : {}),
       ...(scope.trainerId ? { trainerId: scope.trainerId } : {}),
@@ -602,7 +606,7 @@ export class ReportsService {
     const groups = await this.prisma.workout.groupBy({
       by: ['trainerId', 'clientId'],
       where: {
-        status: WorkoutStatus.DONE,
+        status: { in: [WorkoutStatus.COMPLETED, WorkoutStatus.AUTO_CLOSED] },
         trainerId: { in: trainerIds },
         date: this.buildDateFilter(query.from, query.to),
         ...(scope.gymId ? { gymId: scope.gymId } : {}),
@@ -711,7 +715,7 @@ export class ReportsService {
     to: string | undefined,
     scope: ReportScope,
   ): Prisma.Sql[] {
-    const conditions: Prisma.Sql[] = [Prisma.sql`w.status = 'DONE'`];
+    const conditions: Prisma.Sql[] = [Prisma.sql`w.status IN ('COMPLETED', 'AUTO_CLOSED')`];
 
     if (from) {
       conditions.push(
@@ -872,6 +876,26 @@ export class ReportsService {
     }
 
     throw new ForbiddenException('Reports access denied');
+  }
+
+  private async resolveTrainerId(
+    userId: string,
+    role: string,
+  ): Promise<string | undefined> {
+    if (role !== Role.TRAINER) {
+      return undefined;
+    }
+
+    const trainer = await this.prisma.trainer.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!trainer) {
+      throw new ForbiddenException('Trainer profile not found');
+    }
+
+    return trainer.id;
   }
 
   private async resolveClientId(

@@ -222,25 +222,25 @@ describe('Reports attendance (e2e)', () => {
         },
       });
 
-    await workout('2027-10-01', WorkoutStatus.DONE, clientId, trainerId, gymId);
-    await workout('2027-10-02', WorkoutStatus.DONE, clientId, trainerId, gymId);
+    await workout('2027-10-01', WorkoutStatus.COMPLETED, clientId, trainerId, gymId);
+    await workout('2027-10-02', WorkoutStatus.COMPLETED, clientId, trainerId, gymId);
     await workout(
       '2027-10-08',
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       otherClientId,
       trainerId,
       gymId,
     );
     await workout(
       '2027-10-08',
-      WorkoutStatus.SKIPPED,
+      WorkoutStatus.MISSED,
       otherClientId,
       trainerId,
       gymId,
     );
     await workout(
       '2027-10-09',
-      WorkoutStatus.DONE,
+      WorkoutStatus.COMPLETED,
       otherClientId,
       otherTrainerId,
       otherGymId,

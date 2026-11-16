@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../core/api/dio_client.dart';
 import 'report_models.dart';
 
@@ -45,6 +47,32 @@ class ReportsApi {
       queryParameters: {..._clientParams(clientId), 'exercise_id': exerciseId},
     );
     return ExerciseProgress.fromJson(response.data!);
+  }
+
+  Future<List<int>> downloadPdf({
+    required String kind,
+    required String clientId,
+    required String period,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final response = await _api.dio.get<List<int>>(
+      '/reports/pdf/$kind',
+      queryParameters: {
+        if (clientId.isNotEmpty) 'client_id': clientId,
+        'period': period,
+        if (from != null) 'from': _dateOnly(from),
+        if (to != null) 'to': _dateOnly(to),
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? const [];
+  }
+
+  static String _dateOnly(DateTime value) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$month-$day';
   }
 
   static Map<String, dynamic> _clientParams(String clientId) {
