@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const API_PREFIX = '/api/v1';
 const ADMIN_PHONE = '+79990000801';
-const RECEPTION_PHONE = '+79990000802';
+const ADMINISTRATOR_PHONE = '+79990000802';
 const TRAINER_PHONE = '+79990000803';
 const OTHER_TRAINER_PHONE = '+79990000804';
 const CLIENT_PHONE = '+79990000805';
@@ -27,7 +27,7 @@ describe('Reports attendance (e2e)', () => {
   let trainerId: string;
   let otherTrainerId: string;
   let adminToken: string;
-  let receptionToken: string;
+  let administratorToken: string;
   let trainerToken: string;
   let otherTrainerToken: string;
   let clientToken: string;
@@ -61,7 +61,7 @@ describe('Reports attendance (e2e)', () => {
 
     const phones = [
       ADMIN_PHONE,
-      RECEPTION_PHONE,
+      ADMINISTRATOR_PHONE,
       TRAINER_PHONE,
       OTHER_TRAINER_PHONE,
       CLIENT_PHONE,
@@ -80,7 +80,7 @@ describe('Reports attendance (e2e)', () => {
     await prisma.clientGym.deleteMany({
       where: { gym: { name: { in: [GYM_NAME, OTHER_GYM_NAME] } } },
     });
-    await prisma.reception.deleteMany({
+    await prisma.administrator.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
     await prisma.client.deleteMany({
@@ -108,12 +108,12 @@ describe('Reports attendance (e2e)', () => {
       },
     });
 
-    const receptionUser = await prisma.user.create({
+    const administratorUser = await prisma.user.create({
       data: {
-        phone: RECEPTION_PHONE,
+        phone: ADMINISTRATOR_PHONE,
         passwordHash,
-        role: Role.RECEPTION,
-        name: 'E2E Attendance Reception',
+        role: Role.ADMINISTRATOR,
+        name: 'E2E Attendance Administrator',
       },
     });
 
@@ -128,8 +128,8 @@ describe('Reports attendance (e2e)', () => {
       })
     ).id;
 
-    await prisma.reception.create({
-      data: { userId: receptionUser.id, gymId },
+    await prisma.administrator.create({
+      data: { userId: administratorUser.id, gymId },
     });
 
     const trainerUser = await prisma.user.create({
@@ -254,7 +254,7 @@ describe('Reports attendance (e2e)', () => {
     );
 
     adminToken = await login(ADMIN_PHONE);
-    receptionToken = await login(RECEPTION_PHONE);
+    administratorToken = await login(ADMINISTRATOR_PHONE);
     trainerToken = await login(TRAINER_PHONE);
     otherTrainerToken = await login(OTHER_TRAINER_PHONE);
     clientToken = await login(CLIENT_PHONE);
@@ -273,7 +273,7 @@ describe('Reports attendance (e2e)', () => {
     await prisma.clientGym.deleteMany({
       where: { gymId: { in: [gymId, otherGymId] } },
     });
-    await prisma.reception.deleteMany({ where: { gymId } });
+    await prisma.administrator.deleteMany({ where: { gymId } });
     await prisma.client.deleteMany({
       where: { id: { in: [clientId, otherClientId] } },
     });
@@ -287,7 +287,7 @@ describe('Reports attendance (e2e)', () => {
           phone: {
             in: [
               ADMIN_PHONE,
-              RECEPTION_PHONE,
+              ADMINISTRATOR_PHONE,
               TRAINER_PHONE,
               OTHER_TRAINER_PHONE,
               CLIENT_PHONE,
@@ -302,7 +302,7 @@ describe('Reports attendance (e2e)', () => {
         phone: {
           in: [
             ADMIN_PHONE,
-            RECEPTION_PHONE,
+            ADMINISTRATOR_PHONE,
             TRAINER_PHONE,
             OTHER_TRAINER_PHONE,
             CLIENT_PHONE,
@@ -384,9 +384,9 @@ describe('Reports attendance (e2e)', () => {
     expect(byClient.body.totalVisits).toBe(2);
   });
 
-  it('RECEPTION: видит только свой зал', async () => {
+  it('ADMINISTRATOR: видит только свой зал', async () => {
     const response = await authedGet(
-      receptionToken,
+      administratorToken,
       '/reports/attendance?from=2027-10-01&to=2027-10-31',
     );
 
@@ -395,15 +395,15 @@ describe('Reports attendance (e2e)', () => {
     expect(response.body.uniqueClients).toBe(2);
 
     const filtered = await authedGet(
-      receptionToken,
+      administratorToken,
       `/reports/attendance?from=2027-10-01&to=2027-10-31&client_id=${clientId}`,
     );
     expect(filtered.body.totalVisits).toBe(2);
   });
 
-  it('RECEPTION: чужой зал → 403', async () => {
+  it('ADMINISTRATOR: чужой зал → 403', async () => {
     const response = await authedGet(
-      receptionToken,
+      administratorToken,
       `/reports/attendance?gym_id=${otherGymId}`,
     );
 

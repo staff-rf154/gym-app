@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
 import { ensureDefaultConfiguration } from '../default-config/default-config';
 import { PrismaService } from '../prisma/prisma.service';
+import { SyncQueueService } from '../queue/sync-queue.service';
 
 const DEMO_PHONE_PREFIX = '+7999555';
 const DEMO_GYM_PREFIX = 'Демо-зал';
@@ -37,7 +38,7 @@ interface DemoTrainerSpec {
   gymIndex: number;
 }
 
-interface DemoReceptionSpec {
+interface DemoAdministratorSpec {
   name: string;
   gymIndex: number;
 }
@@ -77,7 +78,7 @@ export interface DemoStatus {
   gyms: number;
   trainers: number;
   clients: number;
-  receptions: number;
+  administrators: number;
   workouts: number;
 }
 
@@ -97,7 +98,7 @@ export interface DemoClearResult {
   gyms: number;
   trainers: number;
   clients: number;
-  receptions: number;
+  administrators: number;
   workouts: number;
 }
 
@@ -296,7 +297,7 @@ const DEMO_GYMS: DemoGymSpec[] = [
   },
 ];
 
-const DEMO_RECEPTIONS: DemoReceptionSpec[] = [
+const DEMO_ADMINISTRATORS: DemoAdministratorSpec[] = [
   { name: 'Ирина Белова', gymIndex: 0 },
   { name: 'Светлана Гусева', gymIndex: 1 },
   { name: 'Татьяна Крылова', gymIndex: 2 },
@@ -429,10 +430,22 @@ export class DemoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
-  ) {}
+    private readonly syncQueue: SyncQueueService,
+  ) {
+    this.syncQueue.register('demo.load', () => this.load());
+    this.syncQueue.register('demo.clear', () => this.clear());
+  }
+
+  async loadQueued(): Promise<DemoLoadResult> {
+    return this.syncQueue.run('demo.load', {});
+  }
+
+  async clearQueued(): Promise<DemoClearResult> {
+    return this.syncQueue.run('demo.clear', {});
+  }
 
   async status(): Promise<DemoStatus> {
-    const [gyms, trainers, clients, receptions, workouts] = await this.prisma
+    const [gyms, trainers, clients, administrators, workouts] = await this.prisma
       .$transaction([
         this.prisma.gym.count({
           where: { name: { startsWith: DEMO_GYM_PREFIX } },
@@ -447,7 +460,7 @@ export class DemoService {
             user: { phone: { startsWith: DEMO_PHONE_PREFIX } },
           },
         }),
-        this.prisma.reception.count({
+        this.prisma.administrator.count({
           where: {
             user: { phone: { startsWith: DEMO_PHONE_PREFIX } },
           },
@@ -462,12 +475,12 @@ export class DemoService {
         gyms > 0 ||
         trainers > 0 ||
         clients > 0 ||
-        receptions > 0 ||
+        administrators > 0 ||
         workouts > 0,
       gyms,
       trainers,
       clients,
-      receptions,
+      administrators,
       workouts,
     };
   }
@@ -545,7 +558,7 @@ export class DemoService {
       (_, index) =>
         `${DEMO_PHONE_PREFIX}01${String(index + 1).padStart(2, '0')}`,
     );
-    const receptionUserIds = DEMO_RECEPTIONS.map(
+    const administratorUserIds = DEMO_ADMINISTRATORS.map(
       (_, index) =>
         `${DEMO_PHONE_PREFIX}02${String(index + 1).padStart(2, '0')}`,
     );
@@ -565,12 +578,12 @@ export class DemoService {
         role: Role.CLIENT,
         name: `Демо-клиент ${client.name}`,
       })),
-      ...DEMO_RECEPTIONS.map((reception, index) => ({
+      ...DEMO_ADMINISTRATORS.map((administrator, index) => ({
         id: randomUUID(),
-        phone: receptionUserIds[index],
+        phone: administratorUserIds[index],
         passwordHash,
-        role: Role.RECEPTION,
-        name: `Демо-ресепшен ${reception.name}`,
+        role: Role.ADMINISTRATOR,
+        name: `Демо-администратор ${administrator.name}`,
       })),
     ];
     await this.prisma.user.createMany({ data: usersData });
@@ -625,13 +638,13 @@ export class DemoService {
       })),
     });
 
-    const receptionRows = DEMO_RECEPTIONS.map((reception, index) => ({
+    const administratorRows = DEMO_ADMINISTRATORS.map((administrator, index) => ({
       id: randomUUID(),
       userId:
         usersData[DEMO_TRAINERS.length + DEMO_CLIENTS.length + index].id,
-      gymId: gymIds[reception.gymIndex],
+      gymId: gymIds[administrator.gymIndex],
     }));
-    await this.prisma.reception.createMany({ data: receptionRows });
+    await this.prisma.administrator.createMany({ data: administratorRows });
 
     const clientsWithTrainer = clientRows.map((client, index) => {
       const trainerIndex =
@@ -975,7 +988,7 @@ export class DemoService {
       gyms: gymsData.length,
       trainers: trainerRows.length,
       clients: clientRows.length,
-      receptions: receptionRows.length,
+      administrators: administratorRows.length,
       workouts: workoutRows.length,
       equipment: equipmentRows.length,
       exercises: exercises.length,
@@ -1120,7 +1133,7 @@ export class DemoService {
             ],
           },
         });
-        await tx.reception.deleteMany({
+        await tx.administrator.deleteMany({
           where: {
             OR: [
               { userId: { in: userIds } },
@@ -1152,7 +1165,7 @@ export class DemoService {
       gyms: before.gyms,
       trainers: before.trainers,
       clients: before.clients,
-      receptions: before.receptions,
+      administrators: before.administrators,
       workouts: before.workouts,
     };
   }

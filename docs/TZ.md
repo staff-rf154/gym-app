@@ -17,7 +17,7 @@
 
 ## 1. Назначение и цели
 
-Система управляет спортивным залом: администратор и ресепшен работают в
+Система управляет спортивным залом: администраторы работают в
 веб-панели, тренер и клиент — в едином Android-приложении. Система ведёт
 клиентов, тренеров, залы, тренировки, шаблоны, питание, замеры веса, отчёты,
 чаты, уведомления и push.
@@ -51,7 +51,7 @@
 
 ## 3. Роли и матрица прав
 
-| Действие | ADMIN | RECEPTION | TRAINER | CLIENT |
+| Действие | ADMIN | ADMINISTRATOR | TRAINER | CLIENT |
 | --- | --- | --- | --- | --- |
 | Справочники (залы, тренажёры, упражнения, продукты, цели) | ✓ | чтение своего зала | чтение | чтение |
 | Создание клиентов/тренеров | ✓ | только свой зал | ✗ | ✗ |
@@ -71,7 +71,7 @@
 | Серверные настройки/сертификат | ✓ | ✗ | ✗ | ✗ |
 | Демо-данные | ✓ | ✗ | ✗ | ✗ |
 
-Регистрация только через ADMIN/RECEPTION. Саморегистрации нет. Пароль при
+Регистрация только через ADMIN/ADMINISTRATOR. Саморегистрации нет. Пароль при
 создании — `DEFAULT_CLIENT_PASSWORD` из env, выдаётся один раз в ответе.
 
 ---
@@ -104,7 +104,7 @@ Nginx проксирует `/api/`, `/socket.io/`, `/uploads/`; SPA отдаёт
   401 без отзыва остальных сессий.
 - `POST /auth/logout` — отзывает refresh и очищает cookie.
 - `POST /auth/change-password` — смена своего пароля, отзыв всех refresh.
-- `POST /auth/reset-password` — ADMIN/RECEPTION (свой зал), отзыв всех refresh.
+- `POST /auth/reset-password` — ADMIN/ADMINISTRATOR (свой зал), отзыв всех refresh.
 - `GET /auth/me` — профиль пользователя.
 - `PATCH /auth/timezone` — IANA-пояс пользователя.
 - `PATCH /auth/push-token` — FCM-токен.
@@ -128,10 +128,10 @@ Nginx проксирует `/api/`, `/socket.io/`, `/uploads/`; SPA отдаёт
   цель, заметки; `startWeight`/`startFatMass` неизменяемы; `passwordHash` не
   отдаётся.
 - CRUD тренеров; удаление — архивация с сохранением истории.
-- CRUD ресепшенов с привязкой к залу.
+- CRUD администраторов с привязкой к залу.
 - Связи клиент↔тренер↔зал: создание, деактивация, `assignedBy`.
 - Замеры веса любого клиента.
-- Сброс паролей клиентов/тренеров/ресепшенов.
+- Сброс паролей клиентов/тренеров/администраторов.
 - Загрузка фото: jpg/png/webp ≤ 5 MB, раздача `/uploads/*`.
 - Рассылка уведомлений: заголовок, текст, опционально зал; получатели — клиенты
   с активной связью в зале.
@@ -142,12 +142,12 @@ Nginx проксирует `/api/`, `/socket.io/`, `/uploads/`; SPA отдаёт
 - Настройки сервера: порт, сертификат, демо-данные.
 - UI: универсальный поиск по таблицам, ленивые маршруты (code-splitting).
 
-### 5.3. Web-admin — RECEPTION
+### 5.3. Web-admin — ADMINISTRATOR
 
 - Видит только свой зал; чужие данные → 403/404.
 - Клиенты своего зала: список, создание, редактирование, фото.
 - Тренеры своего зала: список, создание, редактирование, фото.
-- Связи клиент↔тренер своего зала (`assignedBy=RECEPTION`).
+- Связи клиент↔тренер своего зала (`assignedBy=ADMINISTRATOR`).
 - Замеры веса клиентов своего зала.
 - Сброс паролей клиентов/тренеров своего зала.
 - Шаблоны только своего зала (глобальные не видит).
@@ -205,7 +205,7 @@ Nginx проксирует `/api/`, `/socket.io/`, `/uploads/`; SPA отдаёт
 ### 5.6. Сквозные модули
 
 **Замеры веса.** Вес (кг), % жира, дата/время, комментарий. Создание: тренер
-при активной связи; ADMIN — любой клиент; RECEPTION — только свой зал.
+при активной связи; ADMIN — любой клиент; ADMINISTRATOR — только свой зал.
 Просмотр — по правам роли.
 
 **Питание.** Тип `DAILY`/`POST_WORKOUT`, КБЖУ, комментарий, период действия,
@@ -295,10 +295,10 @@ PDF: `GET /reports/pdf/weight`, `GET /reports/pdf/exercises`, кириллица
 ### 6.4. Шаблоны
 
 - `GLOBAL`: `gymId=null`, `trainerId=null`; создаёт ADMIN.
-- `GYM`: `gymId!=null`; ADMIN — любой зал, RECEPTION — свой.
+- `GYM`: `gymId!=null`; ADMIN — любой зал, ADMINISTRATOR — свой.
 - `PERSONAL`: `trainerId!=null`; создаёт/правит тренер.
 - TRAINER видит глобальные + шаблоны своих активных залов + личные.
-- RECEPTION глобальные не видит; чужой зал → 404.
+- ADMINISTRATOR глобальные не видит; чужой зал → 404.
 - Лимит 10 личных; архивация освобождает слот; поиск по названию.
 - Soft delete: `isActive=false`, `archivedAt=now()`; история сохраняется.
 - Изменение/удаление личного шаблона — только владелец.
@@ -319,7 +319,7 @@ PDF: `GET /reports/pdf/weight`, `GET /reports/pdf/exercises`, кириллица
 - Ответ: `{ items, total, page, limit }`.
 - `page=0` или `limit>100` → 400.
 - Применяется к клиентам, тренерам, тренировкам, чатам, уведомлениям
-  (ADMIN/RECEPTION/TRAINER/CLIENT — по соответствующим спискам).
+  (ADMIN/ADMINISTRATOR/TRAINER/CLIENT — по соответствующим спискам).
 - Фильтры (зал, клиент, период, статус, поиск) комбинируются с пагинацией.
 - Web-admin/mobile запрашивают `limit=100`; UI-переключатели страниц —
   допустимое улучшение, не блокирующее MVP.
@@ -349,7 +349,7 @@ PDF: `GET /reports/pdf/weight`, `GET /reports/pdf/exercises`, кириллица
 - Дефолтная конфигурация: 34 упражнения, 22 популярных тренажёра в каждый
   существующий зал (без дублей по имени), 3 глобальных шаблона:
   «Вес вверх» (`weight-up`), «Вес вниз» (`weight-down`), «Тонус» (`tone`).
-- Демо: 3 зала, 6 тренеров, 20 клиентов, 3 ресепшена
+- Демо: 3 зала, 6 тренеров, 20 клиентов, 3 администратора
   (`+79995550201`–`+79995550203`), 780 тренировок, 260 замеров,
   40 рекомендаций, 24 демо-упражнения, 12 демо-шаблонов.
 - Пароль демо-пользователей — `DEFAULT_CLIENT_PASSWORD`.
@@ -377,7 +377,7 @@ PDF: `GET /reports/pdf/weight`, `GET /reports/pdf/exercises`, кириллица
 `backend/prisma/schema.prisma`. Ключевые таблицы:
 
 `User`, `Gym`, `GymEquipment`, `Exercise`, `FoodProduct`, `Goal`, `Client`,
-`Trainer`, `Reception`, `ClientTrainer`, `TrainerGym`, `ClientGym`,
+`Trainer`, `Administrator`, `ClientTrainer`, `TrainerGym`, `ClientGym`,
 `WeightMeasurement`, `WorkoutTemplate`, `WorkoutTemplateItem`, `Workout`,
 `WorkoutItem`, `WorkoutItemResult`, `NutritionRecommendation`, `Chat`,
 `Message`, `Notification`, `NotificationRecipient`, `RefreshToken`.
@@ -400,8 +400,8 @@ PDF: `GET /reports/pdf/weight`, `GET /reports/pdf/exercises`, кириллица
 | --- | --- |
 | system | `GET /health` |
 | auth | `POST /auth/login`, `/refresh`, `/logout`, `/change-password`, `/reset-password`; `GET /auth/me`; `PATCH /auth/timezone`, `/auth/push-token` |
-| admin | CRUD `/admin/gyms`, `/admin/gyms/:gymId/equipment`, `/admin/exercises`, `/admin/food-products`, `/admin/goals`, `/admin/clients`, `/admin/trainers`, `/admin/receptions`; связи, фото, уведомления, сброс пароля, замеры; `/admin/templates`; `/admin/server/*`; `/admin/demo/*` |
-| reception | `/reception/gyms`, `/reception/clients`, `/reception/trainers`, связи, фото, сброс пароля, замеры, `/reception/templates` |
+| admin | CRUD `/admin/gyms`, `/admin/gyms/:gymId/equipment`, `/admin/exercises`, `/admin/food-products`, `/admin/goals`, `/admin/clients`, `/admin/trainers`, `/admin/administrators`; связи, фото, уведомления, сброс пароля, замеры; `/admin/templates`; `/admin/server/*`; `/admin/demo/*` |
+| administrator | `/administrator/gyms`, `/administrator/clients`, `/administrator/trainers`, связи, фото, сброс пароля, замеры, `/administrator/templates` |
 | trainer | `/trainer/clients`, `/trainer/gyms`, `/trainer/workouts`, `/trainer/templates`, `/trainer/nutrition`, `/trainer/workout-items/:id/result`, `/client/:id/weight-measurements` |
 | client | `/client/workouts`, `/client/workout-items/:id/result`, `/client/nutrition`, `/client/gyms`, `/client/trainers` |
 | reports | `/reports/weight-dynamics`, `/reports/exercise-progress`, `/reports/exercises-summary`, `/reports/attendance`, `/reports/equipment-usage`, `/reports/trainers`, `/reports/pdf/weight`, `/reports/pdf/exercises` |
@@ -430,10 +430,10 @@ PDF: `GET /reports/pdf/weight`, `GET /reports/pdf/exercises`, кириллица
 
 **Web-admin (ADMIN):** Login, Dashboard, Trainers, Clients (drawer «Тренеры»,
 кнопка «Вес»), ClientWeight, Gyms, Equipment, Exercises, FoodProducts, Goals,
-Templates, Notifications, Chats, Receptions, Reports, Settings (TZ, демо,
+Templates, Notifications, Chats, Administrators, Reports, Settings (TZ, демо,
 HTTPS-сервер).
 
-**Web-admin (RECEPTION):** Login, Мой зал, Клиенты, Тренеры, связи, замеры,
+**Web-admin (ADMINISTRATOR):** Login, Мой зал, Клиенты, Тренеры, связи, замеры,
 шаблоны своего зала, уведомления.
 
 **Mobile (TRAINER):** Login, Календарь, Мои клиенты, Карточка клиента
@@ -576,7 +576,7 @@ Makefile: `make up`, `down`, `migrate`, `seed`, `test`, `logs`, `psql`,
 | 2. Тренировки | шаблоны, создание, календарь, статусы, результаты | выполнен |
 | 3. Mobile | тренер + клиент, календарь, выполнение, питание, графики, чат, push | выполнен |
 | 4. Безопасность/производительность | аудит 015, пагинация, SQL-отчёты, Redis, soft-delete, индексы | выполнен |
-| 5. HTTPS и эксплуатация | TLS :3000, настройки сервера, сертификаты, демо-ресепшены | выполнен |
+| 5. HTTPS и эксплуатация | TLS :3000, настройки сервера, сертификаты, демо-администраторы | выполнен |
 | 6. Релиз mobile | адрес :3000, release-подпись, сборка APK/AAB, QA на устройстве | в работе |
 
 Остаточный backlog (не блокирует приёмку MVP, если не указано иное):
@@ -617,7 +617,7 @@ Definition of Done для любого этапа: код + миграции + e
 7. Уведомление с `gym_id` приходит клиентам с активной связью в зале.
 8. Inbox и прочтение доступны аутентифицированным ролям.
 9. Клиент сам выбирает тренера (`assignedBy=CLIENT`).
-10. ADMIN/RECEPTION добавляют замеры (ресепшен — только свой зал).
+10. ADMIN/ADMINISTRATOR добавляют замеры (администратор — только свой зал).
 11. Пагинация всех списков работает по контракту.
 12. Архивный тренер не входит; история сохранена.
 13. E2E на отдельной БД `gym_test` зелёные (целевые наборы).
@@ -884,14 +884,14 @@ Feature: Регресс
 ## 19. История решений (консолидировано)
 
 - Клиент сам выбирает тренера; связь `assignedBy=CLIENT`.
-- Замеры веса: тренер (активная связь), ADMIN (любой), RECEPTION (свой зал).
+- Замеры веса: тренер (активная связь), ADMIN (любой), ADMINISTRATOR (свой зал).
 - Единая пагинация `page/limit` для клиентов, тренеров, тренировок, чатов,
   уведомлений.
 - Отчёты агрегируются в PostgreSQL; тяжёлые — только за период.
 - Удаление тренера — soft delete; история сохраняется; restore нет.
 - `isActive` зала — информационный.
 - Redis: распределённый throttler + кеш; чат без pub/sub.
-- Пароли: web — сброс ADMIN/RECEPTION; mobile — смена в настройках.
+- Пароли: web — сброс ADMIN/ADMINISTRATOR; mobile — смена в настройках.
 - Inbox и прочтение — для всех ролей; события тренировок/сообщений/чатов/
   питания с переходом в раздел.
 - E2E — отдельная БД `gym_test`; PostgreSQL без `trust`.

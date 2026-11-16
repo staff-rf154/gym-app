@@ -177,6 +177,10 @@ describe('Reports (e2e)', () => {
       })
     ).id;
 
+    await prisma.trainerGym.create({
+      data: { trainerId, gymId },
+    });
+
     await prisma.clientTrainer.create({
       data: { clientId, trainerId, gymId },
     });
@@ -286,6 +290,9 @@ describe('Reports (e2e)', () => {
     await prisma.workout.deleteMany({ where: { clientId } });
     await prisma.weightMeasurement.deleteMany({ where: { clientId } });
     await prisma.clientTrainer.deleteMany({ where: { clientId } });
+    await prisma.trainerGym.deleteMany({
+      where: { trainerId: { in: [trainerId, otherTrainerId] } },
+    });
     await prisma.client.deleteMany({ where: { id: clientId } });
     await prisma.trainer.deleteMany({
       where: { id: { in: [trainerId, otherTrainerId] } },
@@ -494,6 +501,83 @@ describe('Reports (e2e)', () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it('exercise-progress с фильтром from/to → только точки периода', async () => {
+    const response = await authedGet(
+      clientToken,
+      `/reports/exercise-progress?exercise_id=${exerciseId}&from=2026-11-01&to=2026-11-01`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.points).toHaveLength(1);
+    expect(response.body.points[0].date).toBe('2026-11-01');
+  });
+
+  it('exercises-summary с фильтром from/to → только записи периода', async () => {
+    const response = await authedGet(
+      clientToken,
+      '/reports/exercises-summary?from=2026-11-01&to=2026-11-01',
+    );
+
+    expect(response.status).toBe(200);
+    const first = response.body.find(
+      (item: { exerciseId: string }) => item.exerciseId === exerciseId,
+    );
+    expect(first).toMatchObject({ firstWeight: 55, lastWeight: 55 });
+  });
+
+  it('GET /reports/pdf/weight с period=previousWeek → application/pdf', async () => {
+    const response = await authedGetPdf(
+      clientToken,
+      '/reports/pdf/weight?period=previousWeek',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.body.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  it('GET /reports/pdf/attendance → application/pdf', async () => {
+    const response = await authedGetPdf(
+      trainerToken,
+      `/reports/pdf/attendance?period=month&gym_id=${gymId}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain(
+      'attendance-report.pdf',
+    );
+    expect(response.body.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  it('GET /reports/pdf/equipment → application/pdf', async () => {
+    const response = await authedGetPdf(
+      trainerToken,
+      '/reports/pdf/equipment?period=month',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain(
+      'equipment-report.pdf',
+    );
+    expect(response.body.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  it('GET /reports/pdf/trainers → application/pdf', async () => {
+    const response = await authedGetPdf(
+      trainerToken,
+      '/reports/pdf/trainers?period=month',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain(
+      'trainers-report.pdf',
+    );
+    expect(response.body.subarray(0, 4).toString()).toBe('%PDF');
   });
 
   it('GET /reports/pdf/weight с некорректным period → 400', async () => {

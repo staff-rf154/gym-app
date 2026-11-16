@@ -7,6 +7,7 @@ import '../../core/api/api_error.dart';
 import '../../core/push/push_service.dart';
 import '../../core/widgets/empty_state.dart';
 import '../auth/models.dart';
+import '../chats/chat_providers.dart';
 import '../chats/chats_screen.dart';
 import '../notifications/notification_bell.dart';
 import '../notifications/startup_notifications.dart';
@@ -60,6 +61,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final unreadChats = ref.watch(unreadChatsProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_index]),
@@ -73,12 +75,16 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
             icon: const Icon(Icons.fitness_center),
             tooltip: 'Тренировки на сегодня',
           ),
-          IconButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ChatsScreen()),
+          Badge(
+            isLabelVisible: unreadChats > 0,
+            label: Text('$unreadChats'),
+            child: IconButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const ChatsScreen()),
+              ),
+              icon: const Icon(Icons.chat_bubble_outline),
+              tooltip: 'Чаты',
             ),
-            icon: const Icon(Icons.chat_bubble_outline),
-            tooltip: 'Чаты',
           ),
           IconButton(
             onPressed: () => Navigator.of(context).push(

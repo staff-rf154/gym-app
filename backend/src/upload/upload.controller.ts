@@ -66,7 +66,7 @@ function hasValidSignature(buffer: Buffer, mimetype: string): boolean {
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@Roles(Role.ADMIN, Role.RECEPTION)
+@Roles(Role.ADMIN, Role.ADMINISTRATOR)
 @Controller('admin/upload')
 export class UploadController {
   @Post()

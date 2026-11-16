@@ -224,7 +224,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const ListTile(
           leading: Icon(Icons.info_outline),
           title: Text('О приложении'),
-          subtitle: Text('Gym App 1.0.8 (10) · сервер gym-app'),
+          subtitle: Text('Gym App 1.0.10 (12) · сервер gym-app'),
         ),
         const Divider(),
         ListTile(

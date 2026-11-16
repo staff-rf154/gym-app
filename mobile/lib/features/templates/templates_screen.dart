@@ -48,7 +48,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
       builder: (dialogContext) => AlertDialog(
         title: Text(template.name),
         content: const Text(
-          'Общий шаблон создан администратором или ресепшеном. '
+          'Общий шаблон создан администратором. '
           'Его можно применить при составлении тренировки, '
           'но нельзя редактировать или удалять.',
         ),

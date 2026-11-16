@@ -45,12 +45,12 @@ const formatDateTime = (value: string) =>
 export default function ClientWeightPage() {
   const { id } = useParams<{ id: string }>();
   const role = useAuthStore((state) => state.user?.role);
-  const isReception = role === 'RECEPTION';
-  const weightPath = isReception
-    ? `/reception/clients/${id}/weight-measurements`
+  const isAdministrator = role === 'ADMINISTRATOR';
+  const weightPath = isAdministrator
+    ? `/administrator/clients/${id}/weight-measurements`
     : `/admin/clients/${id}/weight-measurements`;
-  const backPath = isReception
-    ? '/protected/reception/clients'
+  const backPath = isAdministrator
+    ? '/protected/administrator/clients'
     : '/protected/clients';
   const location = useLocation();
   const navigate = useNavigate();

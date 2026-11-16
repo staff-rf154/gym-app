@@ -97,7 +97,7 @@ export default function TemplatesPage() {
   const queryClient = useQueryClient();
   const role = useAuthStore((state) => state.user?.role);
   const isAdmin = role === 'ADMIN';
-  const basePath = isAdmin ? '/admin/templates' : '/reception/templates';
+  const basePath = isAdmin ? '/admin/templates' : '/administrator/templates';
 
   const {
     open: isModalOpen,

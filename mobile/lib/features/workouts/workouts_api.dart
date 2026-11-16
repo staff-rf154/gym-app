@@ -64,6 +64,27 @@ class WorkoutsApi {
     return workouts;
   }
 
+  Future<List<ClientWorkout>> fetchTrainerCalendar({
+    String? clientId,
+    String? gymId,
+    required String from,
+    required String to,
+  }) async {
+    final response = await _api.dio.get<List<dynamic>>(
+      '/trainer/workouts/calendar',
+      queryParameters: {
+        'from': from,
+        'to': to,
+        if (clientId != null && clientId.isNotEmpty) 'client_id': clientId,
+        if (gymId != null && gymId.isNotEmpty) 'gym_id': gymId,
+      },
+    );
+    return (response.data ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(ClientWorkout.fromJson)
+        .toList();
+  }
+
   Future<ClientWorkout> fetchTrainerWorkout(String id) async {
     final response = await _api.dio.get<Map<String, dynamic>>(
       '/trainer/workouts/$id',

@@ -20,7 +20,7 @@ String formatDate(Object value) {
 String assignedByLabel(String value) {
   return switch (value) {
     'ADMIN' => 'администратор',
-    'RECEPTION' => 'ресепшен',
+    'ADMINISTRATOR' => 'администратор',
     'CLIENT' => 'клиент',
     'TRAINER' => 'тренер',
     _ => value,

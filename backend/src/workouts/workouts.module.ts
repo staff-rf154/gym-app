@@ -3,7 +3,7 @@ import {
   AdminTemplatesController,
   ClientWorkoutItemsController,
   ClientWorkoutsController,
-  ReceptionTemplatesController,
+  AdministratorTemplatesController,
   TrainerTemplatesController,
   TrainerWorkoutItemsController,
   TrainerWorkoutsController,
@@ -15,7 +15,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
   imports: [NotificationsModule],
   controllers: [
     AdminTemplatesController,
-    ReceptionTemplatesController,
+    AdministratorTemplatesController,
     TrainerTemplatesController,
     TrainerWorkoutsController,
     ClientWorkoutsController,

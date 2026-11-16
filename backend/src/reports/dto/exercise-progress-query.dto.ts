@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import { IsDateString, IsOptional, IsUUID } from 'class-validator';
 
 export class ExerciseProgressQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
@@ -10,4 +10,14 @@ export class ExerciseProgressQueryDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   exercise_id!: string;
+
+  @ApiPropertyOptional({ format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }

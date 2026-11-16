@@ -24,7 +24,7 @@ import {
 
 @ApiTags('reports')
 @ApiBearerAuth()
-@Roles(Role.CLIENT, Role.RECEPTION, Role.TRAINER, Role.ADMIN)
+@Roles(Role.CLIENT, Role.ADMINISTRATOR, Role.TRAINER, Role.ADMIN)
 @Controller('reports')
 export class ReportsController {
   constructor(
@@ -63,7 +63,7 @@ export class ReportsController {
   }
 
   @Get('attendance')
-  @Roles(Role.ADMIN, Role.RECEPTION, Role.TRAINER)
+  @Roles(Role.ADMIN, Role.ADMINISTRATOR, Role.TRAINER)
   @ApiOperation({ summary: 'Посещаемость' })
   attendance(
     @CurrentUser('userId') userId: string,
@@ -74,7 +74,7 @@ export class ReportsController {
   }
 
   @Get('equipment-usage')
-  @Roles(Role.ADMIN, Role.RECEPTION, Role.TRAINER)
+  @Roles(Role.ADMIN, Role.ADMINISTRATOR, Role.TRAINER)
   @ApiOperation({ summary: 'Использование тренажёров' })
   equipmentUsage(
     @CurrentUser('userId') userId: string,
@@ -85,7 +85,7 @@ export class ReportsController {
   }
 
   @Get('trainers')
-  @Roles(Role.ADMIN, Role.RECEPTION, Role.TRAINER)
+  @Roles(Role.ADMIN, Role.ADMINISTRATOR, Role.TRAINER)
   @ApiOperation({ summary: 'Отчёт по тренерам' })
   trainers(
     @CurrentUser('userId') userId: string,
@@ -117,6 +117,45 @@ export class ReportsController {
   ): Promise<void> {
     const pdf = await this.reportsPdfService.exercisesPdf(userId, role, query);
     this.sendPdf(res, pdf, 'exercises-report.pdf');
+  }
+
+  @Get('pdf/attendance')
+  @Roles(Role.ADMIN, Role.ADMINISTRATOR, Role.TRAINER)
+  @ApiOperation({ summary: 'PDF-отчёт по посещаемости' })
+  async attendancePdf(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
+    @Query() query: ReportPdfQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdf = await this.reportsPdfService.attendancePdf(userId, role, query);
+    this.sendPdf(res, pdf, 'attendance-report.pdf');
+  }
+
+  @Get('pdf/equipment')
+  @Roles(Role.ADMIN, Role.ADMINISTRATOR, Role.TRAINER)
+  @ApiOperation({ summary: 'PDF-отчёт по использованию тренажёров' })
+  async equipmentPdf(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
+    @Query() query: ReportPdfQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdf = await this.reportsPdfService.equipmentPdf(userId, role, query);
+    this.sendPdf(res, pdf, 'equipment-report.pdf');
+  }
+
+  @Get('pdf/trainers')
+  @Roles(Role.ADMIN, Role.ADMINISTRATOR, Role.TRAINER)
+  @ApiOperation({ summary: 'PDF-отчёт по тренерам' })
+  async trainersPdf(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
+    @Query() query: ReportPdfQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdf = await this.reportsPdfService.trainersPdf(userId, role, query);
+    this.sendPdf(res, pdf, 'trainers-report.pdf');
   }
 
   private sendPdf(res: Response, pdf: Buffer, filename: string): void {

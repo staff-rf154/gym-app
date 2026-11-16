@@ -26,14 +26,14 @@ import {
   TrainersService,
 } from '../trainers/trainers.service';
 
-export interface ReceptionGymResponse {
+export interface AdministratorGymResponse {
   id: string;
   name: string;
   address: string;
   isActive: boolean;
 }
 
-export interface ReceptionClientTrainerResponse {
+export interface AdministratorClientTrainerResponse {
   id: string;
   trainerId: string;
   trainerName: string;
@@ -45,14 +45,14 @@ export interface ReceptionClientTrainerResponse {
   assignedAt: Date;
 }
 
-interface ReceptionContext {
-  receptionId: string;
+interface AdministratorContext {
+  administratorId: string;
   gymId: string;
   gymName: string;
 }
 
 @Injectable()
-export class ReceptionService {
+export class AdministratorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clientsService: ClientsService,
@@ -60,7 +60,7 @@ export class ReceptionService {
     private readonly weightMeasurementsService: WeightMeasurementsService,
   ) {}
 
-  async getGym(userId: string): Promise<ReceptionGymResponse> {
+  async getGym(userId: string): Promise<AdministratorGymResponse> {
     const context = await this.getContext(userId);
     const gym = await this.getGymEntity(context.gymId);
 
@@ -98,7 +98,7 @@ export class ReceptionService {
     const context = await this.getContext(userId);
     await this.assertClientInGym(clientId, context.gymId);
 
-    return this.weightMeasurementsService.findAllForReception(
+    return this.weightMeasurementsService.findAllForAdministrator(
       clientId,
       context.gymId,
     );
@@ -112,7 +112,7 @@ export class ReceptionService {
     const context = await this.getContext(userId);
     await this.assertClientInGym(clientId, context.gymId);
 
-    return this.weightMeasurementsService.createForReception(
+    return this.weightMeasurementsService.createForAdministrator(
       userId,
       clientId,
       context.gymId,
@@ -210,7 +210,7 @@ export class ReceptionService {
   async findClientTrainers(
     userId: string,
     clientId: string,
-  ): Promise<ReceptionClientTrainerResponse[]> {
+  ): Promise<AdministratorClientTrainerResponse[]> {
     const context = await this.getContext(userId);
     await this.assertClientInGym(clientId, context.gymId);
 
@@ -240,7 +240,7 @@ export class ReceptionService {
     userId: string,
     clientId: string,
     trainerId: string,
-  ): Promise<ReceptionClientTrainerResponse> {
+  ): Promise<AdministratorClientTrainerResponse> {
     const context = await this.getContext(userId);
     await this.assertClientInGym(clientId, context.gymId);
     await this.assertTrainerInGym(trainerId, context.gymId);
@@ -265,7 +265,7 @@ export class ReceptionService {
           where: { id: existing.id },
           data: {
             isActive: true,
-            assignedBy: 'RECEPTION',
+            assignedBy: 'ADMINISTRATOR',
             assignedById: userId,
             assignedAt: new Date(),
           },
@@ -276,7 +276,7 @@ export class ReceptionService {
             clientId,
             trainerId,
             gymId: context.gymId,
-            assignedBy: 'RECEPTION',
+            assignedBy: 'ADMINISTRATOR',
             assignedById: userId,
           },
           include: { trainer: { include: { user: true } }, gym: true },
@@ -317,20 +317,20 @@ export class ReceptionService {
     }
   }
 
-  private async getContext(userId: string): Promise<ReceptionContext> {
-    const reception = await this.prisma.reception.findUnique({
+  private async getContext(userId: string): Promise<AdministratorContext> {
+    const administrator = await this.prisma.administrator.findUnique({
       where: { userId },
       include: { gym: true },
     });
 
-    if (!reception) {
-      throw new ForbiddenException('Reception profile not found');
+    if (!administrator) {
+      throw new ForbiddenException('Administrator profile not found');
     }
 
     return {
-      receptionId: reception.id,
-      gymId: reception.gymId,
-      gymName: reception.gym.name,
+      administratorId: administrator.id,
+      gymId: administrator.gymId,
+      gymName: administrator.gym.name,
     };
   }
 

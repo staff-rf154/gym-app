@@ -38,9 +38,18 @@ export interface ChatResponse {
   type: ChatType;
   peerId: string;
   peerName: string;
+  peerRole: Role | null;
   lastMessage: string | null;
   unreadCount: number;
   isBlocked: boolean;
+}
+
+export interface ChatStaffContact {
+  id: string;
+  name: string;
+  role: Role;
+  gymId: string | null;
+  gymName: string | null;
 }
 
 @Injectable()
@@ -89,6 +98,87 @@ export class ChatsService {
       page: query.page,
       limit: query.limit,
     };
+  }
+
+  async findStaff(userId: string, role: Role): Promise<ChatStaffContact[]> {
+    let gymIds: string[] = [];
+
+    if (role === Role.TRAINER) {
+      const trainer = await this.prisma.trainer.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+
+      if (!trainer) {
+        throw new ForbiddenException('Trainer profile not found');
+      }
+
+      gymIds = (
+        await this.prisma.trainerGym.findMany({
+          where: { trainerId: trainer.id, isActive: true },
+          select: { gymId: true },
+        })
+      ).map((link) => link.gymId);
+    } else if (role === Role.CLIENT) {
+      const client = await this.prisma.client.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+
+      if (!client) {
+        throw new ForbiddenException('Client profile not found');
+      }
+
+      gymIds = (
+        await this.prisma.clientGym.findMany({
+          where: { clientId: client.id, isActive: true },
+          select: { gymId: true },
+        })
+      ).map((link) => link.gymId);
+    } else {
+      return [];
+    }
+
+    const administrators =
+      gymIds.length > 0
+        ? await this.prisma.administrator.findMany({
+            where: { gymId: { in: gymIds } },
+            select: {
+              userId: true,
+              user: { select: { name: true } },
+              gym: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: 'asc' },
+          })
+        : [];
+
+    const contacts: ChatStaffContact[] = administrators.map((item) => ({
+      id: item.userId,
+      name: item.user.name,
+      role: Role.ADMINISTRATOR,
+      gymId: item.gym.id,
+      gymName: item.gym.name,
+    }));
+
+    if (contacts.length === 0) {
+      const admins = await this.prisma.user.findMany({
+        where: { role: Role.ADMIN },
+        select: { id: true, name: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      contacts.push(
+        ...admins.map((admin) => ({
+          id: admin.id,
+          name: admin.name,
+          role: Role.ADMIN,
+          gymId: null,
+          gymName: null,
+        })),
+      );
+    }
+
+    return contacts;
   }
 
   async createChat(
@@ -397,10 +487,9 @@ export class ChatsService {
         await this.assertActiveClientTrainer(clientId, trainerId);
         adminId = null;
       } else if (dto.type === ChatType.CLIENT_ADMIN) {
-        if (adminId) {
-          await this.assertAdmin(adminId);
-        }
-        adminId = adminId ?? (await this.pickAdminId());
+        adminId = adminId
+          ? await this.resolveClientStaff(adminId, clientId)
+          : await this.pickClientStaff(clientId);
         trainerId = null;
       } else {
         throw new ForbiddenException('Client cannot create this chat type');
@@ -425,9 +514,9 @@ export class ChatsService {
         adminId = null;
       } else if (dto.type === ChatType.TRAINER_ADMIN) {
         if (adminId) {
-          await this.assertAdmin(adminId);
+          await this.assertStaffForTrainer(adminId, trainer.id);
         }
-        adminId = adminId ?? (await this.pickAdminId());
+        adminId = adminId ?? (await this.pickTrainerStaff(trainer.id));
         clientId = null;
       } else {
         throw new ForbiddenException('Trainer cannot create this chat type');
@@ -454,6 +543,33 @@ export class ChatsService {
         await this.assertActiveClientTrainer(clientId, trainerId);
         adminId = null;
       }
+    } else if (role === Role.ADMINISTRATOR) {
+      const administrator = await this.prisma.administrator.findUnique({
+        where: { userId },
+        select: { gymId: true },
+      });
+
+      if (!administrator) {
+        throw new ForbiddenException('Administrator profile not found');
+      }
+
+      adminId = userId;
+
+      if (dto.type === ChatType.CLIENT_ADMIN) {
+        if (!clientId) {
+          throw new BadRequestException('client_id is required');
+        }
+        await this.assertClientInGym(clientId, administrator.gymId);
+        trainerId = null;
+      } else if (dto.type === ChatType.TRAINER_ADMIN) {
+        if (!trainerId) {
+          throw new BadRequestException('trainer_id is required');
+        }
+        await this.assertTrainerInGym(trainerId, administrator.gymId);
+        clientId = null;
+      } else {
+        throw new ForbiddenException('Administrator cannot create this chat type');
+      }
     } else {
       throw new ForbiddenException('Role cannot create chats');
     }
@@ -477,6 +593,79 @@ export class ChatsService {
     }
   }
 
+  private async assertClientInGym(
+    clientId: string,
+    gymId: string,
+  ): Promise<void> {
+    const link = await this.prisma.clientGym.findFirst({
+      where: { clientId, gymId, isActive: true },
+      select: { id: true },
+    });
+
+    if (!link) {
+      throw new ForbiddenException('Client is not assigned to this gym');
+    }
+  }
+
+  private async assertTrainerInGym(
+    trainerId: string,
+    gymId: string,
+  ): Promise<void> {
+    const link = await this.prisma.trainerGym.findFirst({
+      where: { trainerId, gymId, isActive: true },
+      select: { id: true },
+    });
+
+    if (!link) {
+      throw new ForbiddenException('Trainer is not assigned to this gym');
+    }
+  }
+
+  private async resolveClientStaff(
+    staffId: string,
+    clientId: string,
+  ): Promise<string> {
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffId },
+      select: { role: true, administrator: { select: { gymId: true } } },
+    });
+
+    if (staff?.role === Role.ADMIN) {
+      return staffId;
+    }
+
+    if (staff?.role === Role.ADMINISTRATOR && staff.administrator) {
+      await this.assertClientInGym(clientId, staff.administrator.gymId);
+      return staffId;
+    }
+
+    throw new BadRequestException(
+      'admin_id must reference an admin or administrator',
+    );
+  }
+
+  private async pickClientStaff(clientId: string): Promise<string> {
+    const clientGyms = await this.prisma.clientGym.findMany({
+      where: { clientId, isActive: true },
+      select: { gymId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (clientGyms.length > 0) {
+      const administrator = await this.prisma.administrator.findFirst({
+        where: { gymId: { in: clientGyms.map((item) => item.gymId) } },
+        select: { userId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (administrator) {
+        return administrator.userId;
+      }
+    }
+
+    return this.pickAdminId();
+  }
+
   private async pickAdminId(): Promise<string> {
     const admin = await this.prisma.user.findFirst({
       where: { role: Role.ADMIN },
@@ -491,15 +680,61 @@ export class ChatsService {
     return admin.id;
   }
 
-  private async assertAdmin(adminId: string): Promise<void> {
-    const admin = await this.prisma.user.findFirst({
-      where: { id: adminId, role: Role.ADMIN },
-      select: { id: true },
+  private async pickTrainerStaff(trainerId: string): Promise<string> {
+    const gymIds = (
+      await this.prisma.trainerGym.findMany({
+        where: { trainerId, isActive: true },
+        select: { gymId: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    ).map((link) => link.gymId);
+
+    if (gymIds.length > 0) {
+      const administrator = await this.prisma.administrator.findFirst({
+        where: { gymId: { in: gymIds } },
+        select: { userId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (administrator) {
+        return administrator.userId;
+      }
+    }
+
+    return this.pickAdminId();
+  }
+
+  private async assertStaffForTrainer(
+    staffId: string,
+    trainerId: string,
+  ): Promise<void> {
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffId },
+      select: { role: true, administrator: { select: { gymId: true } } },
     });
 
-    if (!admin) {
-      throw new BadRequestException('admin_id must reference an admin');
+    if (staff?.role === Role.ADMIN) {
+      return;
     }
+
+    if (staff?.role === Role.ADMINISTRATOR && staff.administrator) {
+      const link = await this.prisma.trainerGym.findFirst({
+        where: {
+          trainerId,
+          gymId: staff.administrator.gymId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      if (link) {
+        return;
+      }
+    }
+
+    throw new BadRequestException(
+      'admin_id must reference an admin or the trainer gym administrator',
+    );
   }
 
   private async buildParticipantWhere(
@@ -550,6 +785,7 @@ export class ChatsService {
       type: chat.type,
       peerId: peer.id,
       peerName: peer.name,
+      peerRole: peer.role,
       lastMessage: chat.messages[0]?.text ?? null,
       unreadCount: chat._count.messages,
     };
@@ -558,29 +794,53 @@ export class ChatsService {
   private resolvePeer(
     chat: ChatEntity,
     role: Role,
-  ): { id: string; name: string } {
+  ): { id: string; name: string; role: Role | null } {
     if (role === Role.CLIENT) {
       if (chat.trainer) {
-        return { id: chat.trainer.userId, name: chat.trainer.user.name };
+        return {
+          id: chat.trainer.userId,
+          name: chat.trainer.user.name,
+          role: chat.trainer.user.role,
+        };
       }
-      return { id: chat.adminId ?? '', name: chat.admin?.name ?? '' };
+      return {
+        id: chat.adminId ?? '',
+        name: chat.admin?.name ?? '',
+        role: chat.admin?.role ?? null,
+      };
     }
 
     if (role === Role.TRAINER) {
       if (chat.client) {
-        return { id: chat.client.userId, name: chat.client.user.name };
+        return {
+          id: chat.client.userId,
+          name: chat.client.user.name,
+          role: chat.client.user.role,
+        };
       }
-      return { id: chat.adminId ?? '', name: chat.admin?.name ?? '' };
+      return {
+        id: chat.adminId ?? '',
+        name: chat.admin?.name ?? '',
+        role: chat.admin?.role ?? null,
+      };
     }
 
     if (chat.client) {
-      return { id: chat.client.userId, name: chat.client.user.name };
+      return {
+        id: chat.client.userId,
+        name: chat.client.user.name,
+        role: chat.client.user.role,
+      };
     }
 
     if (chat.trainer) {
-      return { id: chat.trainer.userId, name: chat.trainer.user.name };
+      return {
+        id: chat.trainer.userId,
+        name: chat.trainer.user.name,
+        role: chat.trainer.user.role,
+      };
     }
 
-    return { id: '', name: '' };
+    return { id: '', name: '', role: null };
   }
 }

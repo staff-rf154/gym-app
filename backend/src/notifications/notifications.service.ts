@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { PushService } from './push.service';
+import { SyncQueueService } from '../queue/sync-queue.service';
 
 export interface NotificationResponse {
   id: string;
@@ -37,7 +38,12 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pushService: PushService,
-  ) {}
+    private readonly syncQueue: SyncQueueService,
+  ) {
+    this.syncQueue.register('notifications.persist', (payload) =>
+      this.persist(payload as NotificationEventInput),
+    );
+  }
 
   async create(
     senderId: string,
@@ -67,14 +73,17 @@ export class NotificationsService {
           })
         ).map((user) => user.id);
 
-    return this.persist({
-      recipientIds: rawRecipients,
-      senderId,
-      type: NotificationType.SYSTEM,
-      title: dto.title,
-      body: dto.body,
-      gymId,
-    });
+    return this.syncQueue.run(
+      'notifications.persist',
+      {
+        recipientIds: rawRecipients,
+        senderId,
+        type: NotificationType.SYSTEM,
+        title: dto.title,
+        body: dto.body,
+        gymId,
+      },
+    ) as Promise<NotificationResponse>;
   }
 
   async createEvent(
@@ -108,12 +117,14 @@ export class NotificationsService {
         },
       });
 
-      if (recipientIds.length > 0) {
+      for (let index = 0; index < recipientIds.length; index += 500) {
+        const chunk = recipientIds.slice(index, index + 500);
         await tx.notificationRecipient.createMany({
-          data: recipientIds.map((userId) => ({
+          data: chunk.map((userId) => ({
             notificationId: created.id,
             userId,
           })),
+          skipDuplicates: true,
         });
       }
 

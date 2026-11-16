@@ -10,7 +10,7 @@ import { RedisService } from './redis.service';
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 const REPORT_PATH =
-  /\/(clients|trainers|workouts|equipment|gym-links|receptions?|demo)(?:\/|$)/;
+  /\/(clients|trainers|workouts|equipment|gym-links|administrators?|demo)(?:\/|$)/;
 
 const PREFIX_BY_PATH: Array<[RegExp, string]> = [
   [/\/gyms(?:\/|$)/, 'cache:gyms:'],

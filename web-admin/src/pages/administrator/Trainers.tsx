@@ -31,7 +31,7 @@ interface TrainerFormValues {
   photoUrl?: string | null;
 }
 
-export default function ReceptionTrainersPage() {
+export default function AdministratorTrainersPage() {
   const [form] = Form.useForm<TrainerFormValues>();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,15 +43,15 @@ export default function ReceptionTrainersPage() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ['reception-trainers'],
+    queryKey: ['administrator-trainers'],
     queryFn: async () => {
-      const { data } = await api.get<PaginatedResponse<Trainer>>('/reception/trainers', { params: { limit: 100 } });
+      const { data } = await api.get<PaginatedResponse<Trainer>>('/administrator/trainers', { params: { limit: 100 } });
       return data.items;
     },
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['reception-trainers'] });
+    queryClient.invalidateQueries({ queryKey: ['administrator-trainers'] });
   };
 
   const buildPayload = (values: TrainerFormValues) => ({
@@ -63,7 +63,7 @@ export default function ReceptionTrainersPage() {
   const createMutation = useMutation({
     mutationFn: async (values: TrainerFormValues) => {
       const { data } = await api.post<Trainer & { initial_password?: string }>(
-        '/reception/trainers',
+        '/administrator/trainers',
         buildPayload(values),
       );
       return data;
@@ -90,7 +90,7 @@ export default function ReceptionTrainersPage() {
       values: TrainerFormValues;
     }) => {
       const { data } = await api.put<Trainer>(
-        `/reception/trainers/${id}`,
+        `/administrator/trainers/${id}`,
         buildPayload(values),
       );
       return data;

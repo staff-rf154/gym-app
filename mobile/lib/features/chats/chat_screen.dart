@@ -153,12 +153,15 @@ class _ChatConversationState extends ConsumerState<ChatConversation> {
     _scrollToBottom();
     if (message.senderId != _currentUserId) {
       unawaited(_markRead());
+    } else {
+      ref.invalidate(chatsProvider);
     }
   }
 
   Future<void> _markRead() async {
     try {
       await ref.read(chatApiProvider).markRead(widget.chat.id);
+      ref.invalidate(chatsProvider);
     } catch (_) {
       // Badge will refresh on the next chat list load.
     }

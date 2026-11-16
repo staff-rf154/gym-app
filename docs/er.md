@@ -1,4 +1,4 @@
-# ER — модель данных (актуально на 2026-11-15)
+# ER — модель данных (актуально на 2026-11-16)
 
 Источник истины — `backend/prisma/schema.prisma`. Все `DateTime` хранятся как
 `timestamptz` (UTC); `Workout.date`, `Client.birthdate`, `validFrom/validTo`
@@ -6,7 +6,7 @@
 
 ## Enum
 
-- `Role`: `ADMIN`, `RECEPTION`, `TRAINER`, `CLIENT`
+- `Role`: `ADMIN`, `ADMINISTRATOR`, `TRAINER`, `CLIENT`
 - `GymEquipmentType`: `MACHINE`, `FREE_WEIGHT`, `CARDIO`, `OTHER`
 - `ExerciseType`: `EQUIPMENT`, `FREE_WEIGHT`, `BODYWEIGHT`, `CARDIO`
 - `Gender`: `MALE`, `FEMALE`, `OTHER`
@@ -21,7 +21,7 @@
 `name text`, `pushToken text? UNIQUE`, `timezone text DEFAULT 'Asia/Novosibirsk'`,
 `createdAt timestamptz`.
 
-Связи: `client?`, `trainer?`, `reception?`, измерения (`Measurer`), сообщения,
+Связи: `client?`, `trainer?`, `administrator?`, измерения (`Measurer`), сообщения,
 уведомления, получатели, refresh-токены, админские чаты, созданные шаблоны.
 
 ## Gym
@@ -75,7 +75,7 @@
 
 `id uuid PK`, `clientId FK→Client`, `trainerId FK→Trainer`, `gymId FK→Gym`,
 `isActive bool DEFAULT true`, `assignedBy text DEFAULT 'ADMIN'`
-(`ADMIN|RECEPTION|CLIENT`), `assignedById uuid? FK→User`,
+(`ADMIN|ADMINISTRATOR|CLIENT`), `assignedById uuid? FK→User`,
 `assignedAt timestamptz`.
 Уникальность: `(clientId, trainerId, gymId)`.
 Индексы: `(gymId, isActive)`, `(trainerId, isActive)`, `(clientId, isActive)`.
@@ -92,7 +92,7 @@
 `isActive bool DEFAULT true`, `createdAt timestamptz`.
 Уникальность: `(clientId, gymId)`. Индекс: `(gymId, isActive)`.
 
-## Reception
+## Administrator
 
 `id uuid PK`, `userId uuid UNIQUE FK→User`, `gymId FK→Gym`,
 `createdAt timestamptz`. Индекс: `(gymId)`.
@@ -103,7 +103,7 @@
 `measuredAt timestamptz`, `weight float` (кг), `fatMass float?` (%),
 `comment text?`, `createdAt timestamptz`.
 Индекс: `(clientId, measuredAt DESC)`.
-Создание: тренер при активной связи; ADMIN — любой клиент; RECEPTION — только
+Создание: тренер при активной связи; ADMIN — любой клиент; ADMINISTRATOR — только
 свой зал.
 
 ## WorkoutTemplate
@@ -197,4 +197,5 @@
 `20261113120000_global_workout_templates`,
 `20261113150000_workout_started_at`,
 `20261114100000_workout_statuses_tz`,
-`20261115133608_notifications_inbox_types`.
+`20261115133608_notifications_inbox_types`,
+`20261116103000_rename_reception_to_administrator`.

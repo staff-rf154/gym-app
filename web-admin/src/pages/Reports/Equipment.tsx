@@ -11,11 +11,12 @@ import {
   Statistic,
   Table,
   Typography,
+  message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
-import api from '../../api/client';
+import api, { downloadReportPdf } from '../../api/client';
 import { currentWeekRange } from '../../utils/format';
 import { useReportLookups } from './useReportLookups';
 
@@ -98,6 +99,7 @@ export default function EquipmentUsageReportPage() {
     'equipment',
   );
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
+  const [exporting, setExporting] = useState(false);
 
   const params = useMemo(
     () => ({
@@ -122,6 +124,30 @@ export default function EquipmentUsageReportPage() {
       return response.data;
     },
   });
+
+  const handleExportPdf = async () => {
+    setExporting(true);
+
+    try {
+      await downloadReportPdf(
+        '/reports/pdf/equipment',
+        {
+          period: 'custom',
+          from: params.from,
+          to: params.to,
+          gym_id: gymId,
+          trainer_id: trainerId,
+          client_id: clientId,
+        },
+        'equipment-report.pdf',
+      );
+      message.success('PDF сформирован');
+    } catch {
+      message.error('Не удалось сформировать PDF');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const typeColumns: ColumnsType<EquipmentUsageTypeItem> = [
     {
@@ -247,6 +273,9 @@ export default function EquipmentUsageReportPage() {
           onChange={setPeriod}
           options={PERIOD_OPTIONS}
         />
+        <Button loading={exporting} onClick={() => void handleExportPdf()}>
+          Экспорт PDF
+        </Button>
       </Space>
 
       {isError && (

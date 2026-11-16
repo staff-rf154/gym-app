@@ -111,7 +111,7 @@ describe('Demo data (e2e)', () => {
     expect(response.body.gyms).toBe(3);
     expect(response.body.trainers).toBe(6);
     expect(response.body.clients).toBe(20);
-    expect(response.body.receptions).toBe(3);
+    expect(response.body.administrators).toBe(3);
     expect(response.body.exercises).toBe(24);
     expect(response.body.templates).toBe(12);
     expect(response.body.workouts).toBeGreaterThan(600);
@@ -129,25 +129,25 @@ describe('Demo data (e2e)', () => {
     expect(response.body.gyms).toBe(3);
     expect(response.body.trainers).toBe(6);
     expect(response.body.clients).toBe(20);
-    expect(response.body.receptions).toBe(3);
+    expect(response.body.administrators).toBe(3);
     expect(response.body.workouts).toBeGreaterThan(600);
   });
 
-  it('создаёт по ресепшену на зал и пускает их по демо-паролю', async () => {
-    const receptions = await prisma.reception.findMany({
+  it('создаёт по администратору на зал и пускает их по демо-паролю', async () => {
+    const administrators = await prisma.administrator.findMany({
       where: { user: { phone: { startsWith: DEMO_PHONE_PREFIX } } },
       include: { user: true, gym: true },
       orderBy: { createdAt: 'asc' },
     });
 
-    expect(receptions).toHaveLength(3);
-    expect(new Set(receptions.map((reception) => reception.gymId)).size).toBe(
+    expect(administrators).toHaveLength(3);
+    expect(new Set(administrators.map((administrator) => administrator.gymId)).size).toBe(
       3,
     );
-    receptions.forEach((reception) => {
-      expect(reception.gym.name.startsWith(DEMO_GYM_PREFIX)).toBe(true);
-      expect(reception.user.role).toBe(Role.RECEPTION);
-      expect(reception.user.phone.startsWith(`${DEMO_PHONE_PREFIX}02`)).toBe(
+    administrators.forEach((administrator) => {
+      expect(administrator.gym.name.startsWith(DEMO_GYM_PREFIX)).toBe(true);
+      expect(administrator.user.role).toBe(Role.ADMINISTRATOR);
+      expect(administrator.user.phone.startsWith(`${DEMO_PHONE_PREFIX}02`)).toBe(
         true,
       );
     });
@@ -166,7 +166,7 @@ describe('Demo data (e2e)', () => {
       .get(`${API_PREFIX}/auth/me`)
       .set('Authorization', `Bearer ${response.body.access_token}`)
       .expect(200);
-    expect(profile.body.role).toBe(Role.RECEPTION);
+    expect(profile.body.role).toBe(Role.ADMINISTRATOR);
   });
 
   it('не допускает повторную загрузку без очистки', async () => {
@@ -236,7 +236,7 @@ describe('Demo data (e2e)', () => {
     expect(response.body.cleared).toBe(true);
     expect(response.body.gyms).toBe(3);
     expect(response.body.clients).toBe(20);
-    expect(response.body.receptions).toBe(3);
+    expect(response.body.administrators).toBe(3);
 
     const status = await request(app.getHttpServer())
       .get(`${API_PREFIX}/admin/demo/status`)
@@ -247,7 +247,7 @@ describe('Demo data (e2e)', () => {
       gyms: 0,
       trainers: 0,
       clients: 0,
-      receptions: 0,
+      administrators: 0,
       workouts: 0,
     });
 
@@ -283,7 +283,7 @@ describe('Demo data (e2e)', () => {
       gyms: 0,
       trainers: 0,
       clients: 0,
-      receptions: 0,
+      administrators: 0,
       workouts: 0,
     });
   });

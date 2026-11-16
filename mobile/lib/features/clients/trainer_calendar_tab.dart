@@ -32,7 +32,7 @@ final trainerMonthWorkoutsProvider =
       final api = ref.watch(workoutsApiProvider);
       final from = _dateKey(month.firstDay);
       final to = _dateKey(month.lastDay);
-      final workouts = await api.fetchTrainerWorkouts(from: from, to: to);
+      final workouts = await api.fetchTrainerCalendar(from: from, to: to);
       return workouts;
     });
 

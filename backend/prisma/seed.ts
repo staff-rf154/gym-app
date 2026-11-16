@@ -34,38 +34,38 @@ async function main(): Promise<void> {
 
   await ensureDefaultConfiguration(prisma, admin.id);
 
-  const receptionPhone = process.env.RECEPTION_PHONE;
-  const receptionPassword = process.env.RECEPTION_PASSWORD;
-  const receptionGymId = process.env.RECEPTION_GYM_ID;
+  const administratorPhone = process.env.ADMINISTRATOR_PHONE;
+  const administratorPassword = process.env.ADMINISTRATOR_PASSWORD;
+  const administratorGymId = process.env.ADMINISTRATOR_GYM_ID;
 
-  if (receptionPhone && receptionPassword && receptionGymId) {
-    const gym = await prisma.gym.findUnique({ where: { id: receptionGymId } });
+  if (administratorPhone && administratorPassword && administratorGymId) {
+    const gym = await prisma.gym.findUnique({ where: { id: administratorGymId } });
 
     if (!gym) {
-      throw new Error('RECEPTION_GYM_ID does not reference an existing gym');
+      throw new Error('ADMINISTRATOR_GYM_ID does not reference an existing gym');
     }
 
-    const receptionHash = await bcrypt.hash(receptionPassword, 12);
+    const administratorHash = await bcrypt.hash(administratorPassword, 12);
 
-    const receptionUser = await prisma.user.upsert({
-      where: { phone: receptionPhone },
+    const administratorUser = await prisma.user.upsert({
+      where: { phone: administratorPhone },
       update: {
-        role: Role.RECEPTION,
-        name: 'Ресепшен',
+        role: Role.ADMINISTRATOR,
+        name: 'Администратор',
       },
       create: {
-        phone: receptionPhone,
-        role: Role.RECEPTION,
-        name: 'Ресепшен',
-        passwordHash: receptionHash,
+        phone: administratorPhone,
+        role: Role.ADMINISTRATOR,
+        name: 'Администратор',
+        passwordHash: administratorHash,
         timezone,
       },
     });
 
-    await prisma.reception.upsert({
-      where: { userId: receptionUser.id },
-      update: { gymId: receptionGymId },
-      create: { userId: receptionUser.id, gymId: receptionGymId },
+    await prisma.administrator.upsert({
+      where: { userId: administratorUser.id },
+      update: { gymId: administratorGymId },
+      create: { userId: administratorUser.id, gymId: administratorGymId },
     });
   }
 }

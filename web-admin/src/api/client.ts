@@ -84,4 +84,27 @@ api.interceptors.response.use(
   },
 );
 
+export async function downloadReportPdf(
+  path: string,
+  params: Record<string, string | undefined>,
+  filename: string,
+): Promise<void> {
+  const response = await api.get<Blob>(path, {
+    params,
+    responseType: 'blob',
+  });
+
+  const url = window.URL.createObjectURL(
+    new Blob([response.data], { type: 'application/pdf' }),
+  );
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export default api;

@@ -82,7 +82,7 @@ interface ClientFormValues {
   photoUrl?: string | null;
 }
 
-export default function ReceptionClientsPage() {
+export default function AdministratorClientsPage() {
   const navigate = useNavigate();
   const [form] = Form.useForm<ClientFormValues>();
   const queryClient = useQueryClient();
@@ -97,23 +97,23 @@ export default function ReceptionClientsPage() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ['reception-clients'],
+    queryKey: ['administrator-clients'],
     queryFn: async () => {
-      const { data } = await api.get<PaginatedResponse<Client>>('/reception/clients', { params: { limit: 100 } });
+      const { data } = await api.get<PaginatedResponse<Client>>('/administrator/clients', { params: { limit: 100 } });
       return data.items;
     },
   });
 
   const { data: trainers = [] } = useQuery({
-    queryKey: ['reception-trainers'],
+    queryKey: ['administrator-trainers'],
     queryFn: async () => {
-      const { data } = await api.get<PaginatedResponse<Trainer>>('/reception/trainers', { params: { limit: 100 } });
+      const { data } = await api.get<PaginatedResponse<Trainer>>('/administrator/trainers', { params: { limit: 100 } });
       return data.items;
     },
   });
 
   const { data: goals = [] } = useQuery({
-    queryKey: ['reception-goals'],
+    queryKey: ['administrator-goals'],
     queryFn: async () => {
       const { data } = await api.get<GoalOption[]>('/goals');
       return data;
@@ -130,18 +130,18 @@ export default function ReceptionClientsPage() {
     isLoading: linksLoading,
     refetch: refetchLinks,
   } = useQuery({
-    queryKey: ['reception-client-trainers', trainersClient?.id],
+    queryKey: ['administrator-client-trainers', trainersClient?.id],
     enabled: Boolean(trainersClient),
     queryFn: async () => {
       const { data } = await api.get<ClientTrainerLink[]>(
-        `/reception/clients/${trainersClient?.id}/trainers`,
+        `/administrator/clients/${trainersClient?.id}/trainers`,
       );
       return data;
     },
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['reception-clients'] });
+    queryClient.invalidateQueries({ queryKey: ['administrator-clients'] });
   };
 
   const buildPayload = (values: ClientFormValues) => ({
@@ -162,7 +162,7 @@ export default function ReceptionClientsPage() {
   const createMutation = useMutation({
     mutationFn: async (values: ClientFormValues) => {
       const { data } = await api.post<Client & { initial_password?: string }>(
-        '/reception/clients',
+        '/administrator/clients',
         buildPayload(values),
       );
       return data;
@@ -189,7 +189,7 @@ export default function ReceptionClientsPage() {
       values: ClientFormValues;
     }) => {
       const { data } = await api.put<Client>(
-        `/reception/clients/${id}`,
+        `/administrator/clients/${id}`,
         buildPayload(values),
       );
       return data;
@@ -206,14 +206,14 @@ export default function ReceptionClientsPage() {
 
   const linkMutation = useMutation({
     mutationFn: async () => {
-      await api.post(`/reception/clients/${trainersClient?.id}/trainers`, {
+      await api.post(`/administrator/clients/${trainersClient?.id}/trainers`, {
         trainer_id: trainerId,
       });
     },
     onSuccess: () => {
       setTrainerId(undefined);
       queryClient.invalidateQueries({
-        queryKey: ['reception-client-trainers', trainersClient?.id],
+        queryKey: ['administrator-client-trainers', trainersClient?.id],
       });
       invalidate();
       message.success('Тренер назначен');
@@ -224,7 +224,7 @@ export default function ReceptionClientsPage() {
   const unlinkMutation = useMutation({
     mutationFn: async (linkId: string) => {
       await api.delete(
-        `/reception/clients/${trainersClient?.id}/trainers/${linkId}`,
+        `/administrator/clients/${trainersClient?.id}/trainers/${linkId}`,
       );
     },
     onSuccess: () => {
@@ -333,7 +333,7 @@ export default function ReceptionClientsPage() {
           <Button
             type="link"
             onClick={() =>
-              navigate(`/protected/reception/clients/${client.id}/weight`, {
+              navigate(`/protected/administrator/clients/${client.id}/weight`, {
                 state: { name: client.name },
               })
             }
@@ -497,7 +497,7 @@ export default function ReceptionClientsPage() {
                 dataIndex: 'assignedBy',
                 key: 'assignedBy',
                 render: (value: string) =>
-                  value === 'RECEPTION' ? 'Ресепшен' : value,
+                  value === 'ADMINISTRATOR' ? 'Администратор' : value,
               },
               {
                 title: '',

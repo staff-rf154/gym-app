@@ -1,6 +1,7 @@
 # API — актуальная спецификация
 
-Сгенерировано из работающего backend (`GET /api/docs-json`) 2026-11-15.
+Сгенерировано из работающего backend (`GET /api/docs-json`) 2026-11-15;
+пути домена `reception` переименованы в `administrator` в задании 039 (2026-11-16).
 Формат: OpenAPI. Базовый префикс — `/api/v1`; авторизация — Bearer JWT.
 При расхождении приоритет имеет `docs/TZ.md`.
 
@@ -2657,9 +2658,9 @@
         ]
       }
     },
-    "/api/v1/reception/templates": {
+    "/api/v1/administrator/templates": {
       "get": {
-        "operationId": "ReceptionTemplatesController_findAll",
+        "operationId": "AdministratorTemplatesController_findAll",
         "parameters": [],
         "responses": {
           "200": {
@@ -2673,11 +2674,11 @@
         ],
         "summary": "Шаблоны моего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       },
       "post": {
-        "operationId": "ReceptionTemplatesController_create",
+        "operationId": "AdministratorTemplatesController_create",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -2701,13 +2702,13 @@
         ],
         "summary": "Создать шаблон тренировки для своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/templates/{id}": {
+    "/api/v1/administrator/templates/{id}": {
       "put": {
-        "operationId": "ReceptionTemplatesController_update",
+        "operationId": "AdministratorTemplatesController_update",
         "parameters": [
           {
             "name": "id",
@@ -2740,11 +2741,11 @@
         ],
         "summary": "Обновить шаблон своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       },
       "delete": {
-        "operationId": "ReceptionTemplatesController_remove",
+        "operationId": "AdministratorTemplatesController_remove",
         "parameters": [
           {
             "name": "id",
@@ -2767,7 +2768,7 @@
         ],
         "summary": "Архивировать шаблон своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
@@ -3860,9 +3861,9 @@
         ]
       }
     },
-    "/api/v1/admin/receptions": {
+    "/api/v1/admin/administrators": {
       "get": {
-        "operationId": "ReceptionsController_findAll",
+        "operationId": "AdministratorsController_findAll",
         "parameters": [],
         "responses": {
           "200": {
@@ -3874,20 +3875,20 @@
             "bearer": []
           }
         ],
-        "summary": "Список ресепшенов",
+        "summary": "Список администраторов",
         "tags": [
           "admin"
         ]
       },
       "post": {
-        "operationId": "ReceptionsController_create",
+        "operationId": "AdministratorsController_create",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateReceptionDto"
+                "$ref": "#/components/schemas/CreateAdministratorDto"
               }
             }
           }
@@ -3902,15 +3903,15 @@
             "bearer": []
           }
         ],
-        "summary": "Создать ресепшен",
+        "summary": "Создать администратор",
         "tags": [
           "admin"
         ]
       }
     },
-    "/api/v1/admin/receptions/{id}": {
+    "/api/v1/admin/administrators/{id}": {
       "put": {
-        "operationId": "ReceptionsController_update",
+        "operationId": "AdministratorsController_update",
         "parameters": [
           {
             "name": "id",
@@ -3926,7 +3927,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateReceptionDto"
+                "$ref": "#/components/schemas/UpdateAdministratorDto"
               }
             }
           }
@@ -3941,13 +3942,13 @@
             "bearer": []
           }
         ],
-        "summary": "Обновить ресепшен",
+        "summary": "Обновить администратор",
         "tags": [
           "admin"
         ]
       },
       "delete": {
-        "operationId": "ReceptionsController_remove",
+        "operationId": "AdministratorsController_remove",
         "parameters": [
           {
             "name": "id",
@@ -3968,15 +3969,15 @@
             "bearer": []
           }
         ],
-        "summary": "Удалить ресепшен",
+        "summary": "Удалить администратор",
         "tags": [
           "admin"
         ]
       }
     },
-    "/api/v1/admin/receptions/{id}/reset-password": {
+    "/api/v1/admin/administrators/{id}/reset-password": {
       "post": {
-        "operationId": "ReceptionsController_resetPassword",
+        "operationId": "AdministratorsController_resetPassword",
         "parameters": [
           {
             "name": "id",
@@ -4007,15 +4008,15 @@
             "bearer": []
           }
         ],
-        "summary": "Сбросить пароль ресепшена",
+        "summary": "Сбросить пароль администратора",
         "tags": [
           "admin"
         ]
       }
     },
-    "/api/v1/reception/gyms": {
+    "/api/v1/administrator/gyms": {
       "get": {
-        "operationId": "ReceptionController_getGym",
+        "operationId": "AdministratorController_getGym",
         "parameters": [],
         "responses": {
           "200": {
@@ -4029,13 +4030,13 @@
         ],
         "summary": "Мой зал",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/clients": {
+    "/api/v1/administrator/clients": {
       "get": {
-        "operationId": "ReceptionController_findClients",
+        "operationId": "AdministratorController_findClients",
         "parameters": [
           {
             "name": "page",
@@ -4071,11 +4072,11 @@
         ],
         "summary": "Клиенты моего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       },
       "post": {
-        "operationId": "ReceptionController_createClient",
+        "operationId": "AdministratorController_createClient",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4099,13 +4100,13 @@
         ],
         "summary": "Создать клиента в своём зале",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/clients/{id}": {
+    "/api/v1/administrator/clients/{id}": {
       "get": {
-        "operationId": "ReceptionController_findClient",
+        "operationId": "AdministratorController_findClient",
         "parameters": [
           {
             "name": "id",
@@ -4128,11 +4129,11 @@
         ],
         "summary": "Клиент своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       },
       "put": {
-        "operationId": "ReceptionController_updateClient",
+        "operationId": "AdministratorController_updateClient",
         "parameters": [
           {
             "name": "id",
@@ -4165,13 +4166,13 @@
         ],
         "summary": "Обновить клиента своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/clients/{id}/weight-measurements": {
+    "/api/v1/administrator/clients/{id}/weight-measurements": {
       "get": {
-        "operationId": "ReceptionController_findWeightMeasurements",
+        "operationId": "AdministratorController_findWeightMeasurements",
         "parameters": [
           {
             "name": "id",
@@ -4194,11 +4195,11 @@
         ],
         "summary": "Замеры веса клиента своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       },
       "post": {
-        "operationId": "ReceptionController_createWeightMeasurement",
+        "operationId": "AdministratorController_createWeightMeasurement",
         "parameters": [
           {
             "name": "id",
@@ -4231,13 +4232,13 @@
         ],
         "summary": "Добавить замер веса клиента своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/clients/{id}/reset-password": {
+    "/api/v1/administrator/clients/{id}/reset-password": {
       "post": {
-        "operationId": "ReceptionController_resetClientPassword",
+        "operationId": "AdministratorController_resetClientPassword",
         "parameters": [
           {
             "name": "id",
@@ -4270,13 +4271,13 @@
         ],
         "summary": "Сбросить пароль клиента своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/clients/{id}/photo": {
+    "/api/v1/administrator/clients/{id}/photo": {
       "post": {
-        "operationId": "ReceptionController_setClientPhoto",
+        "operationId": "AdministratorController_setClientPhoto",
         "parameters": [
           {
             "name": "id",
@@ -4309,13 +4310,13 @@
         ],
         "summary": "Задать фото клиента",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/clients/{id}/trainers": {
+    "/api/v1/administrator/clients/{id}/trainers": {
       "get": {
-        "operationId": "ReceptionController_findClientTrainers",
+        "operationId": "AdministratorController_findClientTrainers",
         "parameters": [
           {
             "name": "id",
@@ -4338,11 +4339,11 @@
         ],
         "summary": "Тренеры клиента в моём зале",
         "tags": [
-          "reception"
+          "administrator"
         ]
       },
       "post": {
-        "operationId": "ReceptionController_linkTrainer",
+        "operationId": "AdministratorController_linkTrainer",
         "parameters": [
           {
             "name": "id",
@@ -4358,7 +4359,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LinkReceptionTrainerDto"
+                "$ref": "#/components/schemas/LinkAdministratorTrainerDto"
               }
             }
           }
@@ -4375,13 +4376,13 @@
         ],
         "summary": "Назначить тренера клиенту",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/clients/{id}/trainers/{linkId}": {
+    "/api/v1/administrator/clients/{id}/trainers/{linkId}": {
       "delete": {
-        "operationId": "ReceptionController_unlinkTrainer",
+        "operationId": "AdministratorController_unlinkTrainer",
         "parameters": [
           {
             "name": "id",
@@ -4412,13 +4413,13 @@
         ],
         "summary": "Отвязать тренера от клиента",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/trainers": {
+    "/api/v1/administrator/trainers": {
       "get": {
-        "operationId": "ReceptionController_findTrainers",
+        "operationId": "AdministratorController_findTrainers",
         "parameters": [
           {
             "name": "page",
@@ -4454,11 +4455,11 @@
         ],
         "summary": "Тренеры моего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       },
       "post": {
-        "operationId": "ReceptionController_createTrainer",
+        "operationId": "AdministratorController_createTrainer",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4482,13 +4483,13 @@
         ],
         "summary": "Создать тренера в своём зале",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/trainers/{id}/reset-password": {
+    "/api/v1/administrator/trainers/{id}/reset-password": {
       "post": {
-        "operationId": "ReceptionController_resetTrainerPassword",
+        "operationId": "AdministratorController_resetTrainerPassword",
         "parameters": [
           {
             "name": "id",
@@ -4521,13 +4522,13 @@
         ],
         "summary": "Сбросить пароль тренера своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/trainers/{id}": {
+    "/api/v1/administrator/trainers/{id}": {
       "put": {
-        "operationId": "ReceptionController_updateTrainer",
+        "operationId": "AdministratorController_updateTrainer",
         "parameters": [
           {
             "name": "id",
@@ -4560,13 +4561,13 @@
         ],
         "summary": "Обновить тренера своего зала",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
-    "/api/v1/reception/trainers/{id}/photo": {
+    "/api/v1/administrator/trainers/{id}/photo": {
       "post": {
-        "operationId": "ReceptionController_setTrainerPhoto",
+        "operationId": "AdministratorController_setTrainerPhoto",
         "parameters": [
           {
             "name": "id",
@@ -4599,7 +4600,7 @@
         ],
         "summary": "Задать фото тренера",
         "tags": [
-          "reception"
+          "administrator"
         ]
       }
     },
@@ -5643,7 +5644,7 @@
           "text"
         ]
       },
-      "CreateReceptionDto": {
+      "CreateAdministratorDto": {
         "type": "object",
         "properties": {
           "phone": {
@@ -5670,7 +5671,7 @@
           "gym_id"
         ]
       },
-      "UpdateReceptionDto": {
+      "UpdateAdministratorDto": {
         "type": "object",
         "properties": {
           "phone": {
@@ -5704,7 +5705,7 @@
           "photoUrl"
         ]
       },
-      "LinkReceptionTrainerDto": {
+      "LinkAdministratorTrainerDto": {
         "type": "object",
         "properties": {
           "trainer_id": {

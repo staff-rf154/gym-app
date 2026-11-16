@@ -12,10 +12,10 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const API_PREFIX = '/api/v1';
 const ADMIN_PHONE = '+79990000901';
-const RECEPTION_PHONE = '+79990000902';
+const ADMINISTRATOR_PHONE = '+79990000902';
 const TRAINER_PHONE = '+79990000903';
 const TEST_PASSWORD = 'TestPass123!';
-const PHONES = [ADMIN_PHONE, RECEPTION_PHONE, TRAINER_PHONE];
+const PHONES = [ADMIN_PHONE, ADMINISTRATOR_PHONE, TRAINER_PHONE];
 const EXERCISE_NAME = 'E2E Global Template Exercise';
 const GYM_NAME = 'E2E Global Templates Gym';
 
@@ -23,13 +23,13 @@ describe('Global workout templates (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let adminToken: string;
-  let receptionToken: string;
+  let administratorToken: string;
   let trainerToken: string;
   let gymId: string;
   let exerciseId: string;
   let globalTemplateId: string;
   let gymTemplateId: string;
-  let receptionTemplateId: string;
+  let administratorTemplateId: string;
 
   const login = async (phone: string): Promise<string> => {
     const response = await request(app.getHttpServer())
@@ -89,12 +89,12 @@ describe('Global workout templates (e2e)', () => {
         name: 'E2E Админ шаблонов',
       },
     });
-    const receptionUser = await prisma.user.create({
+    const administratorUser = await prisma.user.create({
       data: {
-        phone: RECEPTION_PHONE,
+        phone: ADMINISTRATOR_PHONE,
         passwordHash,
-        role: Role.RECEPTION,
-        name: 'E2E Ресепшен шаблонов',
+        role: Role.ADMINISTRATOR,
+        name: 'E2E Администратор шаблонов',
       },
     });
     const trainerUser = await prisma.user.create({
@@ -111,8 +111,8 @@ describe('Global workout templates (e2e)', () => {
     });
     gymId = gym.id;
 
-    await prisma.reception.create({
-      data: { userId: receptionUser.id, gymId },
+    await prisma.administrator.create({
+      data: { userId: administratorUser.id, gymId },
     });
     const trainer = await prisma.trainer.create({
       data: { userId: trainerUser.id },
@@ -131,7 +131,7 @@ describe('Global workout templates (e2e)', () => {
     exerciseId = exercise.id;
 
     adminToken = await login(ADMIN_PHONE);
-    receptionToken = await login(RECEPTION_PHONE);
+    administratorToken = await login(ADMINISTRATOR_PHONE);
     trainerToken = await login(TRAINER_PHONE);
   });
 
@@ -139,7 +139,7 @@ describe('Global workout templates (e2e)', () => {
     const testTemplateIds = [
       globalTemplateId,
       gymTemplateId,
-      receptionTemplateId,
+      administratorTemplateId,
     ].filter((id): id is string => Boolean(id));
     await prisma.workoutTemplateItem.deleteMany({
       where: { templateId: { in: testTemplateIds } },
@@ -160,7 +160,7 @@ describe('Global workout templates (e2e)', () => {
     });
     await prisma.workoutTemplate.deleteMany({ where: { gymId } });
     await prisma.trainerGym.deleteMany({ where: { gymId } });
-    await prisma.reception.deleteMany({ where: { gymId } });
+    await prisma.administrator.deleteMany({ where: { gymId } });
     await prisma.trainer.deleteMany({
       where: { user: { phone: { in: PHONES } } },
     });
@@ -212,26 +212,26 @@ describe('Global workout templates (e2e)', () => {
     gymTemplateId = response.body.id as string;
   });
 
-  it('RECEPTION создаёт шаблон только своего зала', async () => {
-    const response = await authed(receptionToken)
-      .post('/reception/templates')
-      .send({ name: 'E2E Шаблон ресепшена', items: [item()] });
+  it('ADMINISTRATOR создаёт шаблон только своего зала', async () => {
+    const response = await authed(administratorToken)
+      .post('/administrator/templates')
+      .send({ name: 'E2E Шаблон администратора', items: [item()] });
 
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({
       scope: 'GYM',
       gymId,
     });
-    receptionTemplateId = response.body.id as string;
+    administratorTemplateId = response.body.id as string;
   });
 
-  it('RECEPTION видит шаблоны своего зала, но не глобальные', async () => {
-    const response = await authed(receptionToken).get('/reception/templates');
+  it('ADMINISTRATOR видит шаблоны своего зала, но не глобальные', async () => {
+    const response = await authed(administratorToken).get('/administrator/templates');
 
     expect(response.status).toBe(200);
     const ids = (response.body as Array<{ id: string }>).map((t) => t.id);
     expect(ids).toContain(gymTemplateId);
-    expect(ids).toContain(receptionTemplateId);
+    expect(ids).toContain(administratorTemplateId);
     expect(ids).not.toContain(globalTemplateId);
   });
 
@@ -245,7 +245,7 @@ describe('Global workout templates (e2e)', () => {
     );
     expect(templates.find((t) => t.id === gymTemplateId)?.scope).toBe('GYM');
     expect(
-      templates.find((t) => t.id === receptionTemplateId)?.scope,
+      templates.find((t) => t.id === administratorTemplateId)?.scope,
     ).toBe('GYM');
   });
 
@@ -289,9 +289,9 @@ describe('Global workout templates (e2e)', () => {
     expect(remove.status).toBe(404);
   });
 
-  it('RECEPTION не может изменить шаблон другого зала', async () => {
-    const response = await authed(receptionToken)
-      .put(`/reception/templates/${globalTemplateId}`)
+  it('ADMINISTRATOR не может изменить шаблон другого зала', async () => {
+    const response = await authed(administratorToken)
+      .put(`/administrator/templates/${globalTemplateId}`)
       .send({ name: 'Взлом', items: [item()] });
 
     expect(response.status).toBe(404);

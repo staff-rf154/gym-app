@@ -11,11 +11,12 @@ import {
   Statistic,
   Table,
   Typography,
+  message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
-import api from '../../api/client';
+import api, { downloadReportPdf } from '../../api/client';
 import { currentWeekRange } from '../../utils/format';
 import { useReportLookups } from './useReportLookups';
 
@@ -52,6 +53,7 @@ export default function AttendanceReportPage() {
   const [trainerId, setTrainerId] = useState<string | undefined>();
   const [clientId, setClientId] = useState<string | undefined>();
   const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month'>('day');
+  const [exporting, setExporting] = useState(false);
 
   const params = useMemo(
     () => ({
@@ -75,6 +77,30 @@ export default function AttendanceReportPage() {
       return response.data;
     },
   });
+
+  const handleExportPdf = async () => {
+    setExporting(true);
+
+    try {
+      await downloadReportPdf(
+        '/reports/pdf/attendance',
+        {
+          period: 'custom',
+          from: params.from,
+          to: params.to,
+          gym_id: gymId,
+          trainer_id: trainerId,
+          client_id: clientId,
+        },
+        'attendance-report.pdf',
+      );
+      message.success('PDF сформирован');
+    } catch {
+      message.error('Не удалось сформировать PDF');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const dynamicsColumns: ColumnsType<AttendanceDynamicsPoint> = [
     { title: 'Период', dataIndex: 'period', key: 'period' },
@@ -155,6 +181,9 @@ export default function AttendanceReportPage() {
           onChange={setGroupBy}
           options={GROUP_OPTIONS}
         />
+        <Button loading={exporting} onClick={() => void handleExportPdf()}>
+          Экспорт PDF
+        </Button>
       </Space>
 
       {isError && (

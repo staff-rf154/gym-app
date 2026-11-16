@@ -15,17 +15,25 @@ class ExerciseProgressScreen extends ConsumerWidget {
     required this.clientId,
     required this.exerciseId,
     required this.exerciseName,
+    this.from,
+    this.to,
   });
 
   final String clientId;
   final String exerciseId;
   final String exerciseName;
+  final DateTime? from;
+  final DateTime? to;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final progress = ref.watch(
-      exerciseProgressProvider((clientId: clientId, exerciseId: exerciseId)),
+    final params = (
+      clientId: clientId,
+      exerciseId: exerciseId,
+      from: from,
+      to: to,
     );
+    final progress = ref.watch(exerciseProgressProvider(params));
 
     return Scaffold(
       appBar: AppBar(title: Text(exerciseName)),
@@ -42,12 +50,8 @@ class ExerciseProgressScreen extends ConsumerWidget {
                 Text(apiErrorMessage(error), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 FilledButton(
-                  onPressed: () => ref.invalidate(
-                    exerciseProgressProvider((
-                      clientId: clientId,
-                      exerciseId: exerciseId,
-                    )),
-                  ),
+                  onPressed: () =>
+                      ref.invalidate(exerciseProgressProvider(params)),
                   child: const Text('Повторить'),
                 ),
               ],

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/push/push_service.dart';
 import '../auth/models.dart';
+import '../chats/chat_providers.dart';
 import '../chats/chats_screen.dart';
 import '../notifications/notification_bell.dart';
 import '../notifications/startup_notifications.dart';
@@ -67,6 +68,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final unreadChats = ref.watch(unreadChatsProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_index]),
@@ -99,33 +101,41 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
           _index = value;
           _visitedTabs.add(value);
         }),
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
             selectedIcon: Icon(Icons.calendar_month),
             label: 'Календарь',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.fitness_center_outlined),
             selectedIcon: Icon(Icons.fitness_center),
             label: 'Трен.',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.restaurant_outlined),
             selectedIcon: Icon(Icons.restaurant),
             label: 'Питание',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.insights_outlined),
             selectedIcon: Icon(Icons.insights),
             label: 'Отчёты',
           ),
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
+            icon: Badge(
+              isLabelVisible: unreadChats > 0,
+              label: Text('$unreadChats'),
+              child: const Icon(Icons.chat_bubble_outline),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: unreadChats > 0,
+              label: Text('$unreadChats'),
+              child: const Icon(Icons.chat_bubble),
+            ),
             label: 'Чаты',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
             label: 'Ещё',

@@ -18,6 +18,7 @@ class PdfExportButton extends ConsumerWidget {
 
   static const _periods = [
     ('week', 'Неделя'),
+    ('previousWeek', 'Прошлая неделя'),
     ('month', 'Месяц'),
     ('3months', '3 месяца'),
     ('year', 'Год'),

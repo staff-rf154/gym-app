@@ -9,7 +9,7 @@ datasource db {
 
 enum Role {
   ADMIN
-  RECEPTION
+  ADMINISTRATOR
   TRAINER
   CLIENT
 }
@@ -73,7 +73,7 @@ model User {
 
   client                  Client?
   trainer                 Trainer?
-  reception               Reception?
+  administrator           Administrator?
   measurements            WeightMeasurement[]     @relation("Measurer")
   sentMessages            Message[]
   sentNotifications       Notification[]
@@ -96,7 +96,7 @@ model Gym {
   clientGyms       ClientGym[]
   workouts         Workout[]
   notifications    Notification[]
-  receptions       Reception[]
+  administrators   Administrator[]
   workoutTemplates WorkoutTemplate[]
 }
 
@@ -114,6 +114,8 @@ model GymEquipment {
   gym           Gym                   @relation(fields: [gymId], references: [id])
   templateItems WorkoutTemplateItem[]
   workoutItems  WorkoutItem[]
+
+  @@index([gymId])
 }
 
 model Exercise {
@@ -251,7 +253,7 @@ model ClientGym {
   @@index([gymId, isActive])
 }
 
-model Reception {
+model Administrator {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @unique @db.Uuid
   gymId     String   @db.Uuid
@@ -321,18 +323,18 @@ model WorkoutTemplateItem {
 }
 
 model Workout {
-  id         String        @id @default(uuid()) @db.Uuid
-  clientId   String        @db.Uuid
-  trainerId  String        @db.Uuid
-  gymId      String        @db.Uuid
-  date       DateTime      @db.Date
-  startTime  String?       @db.VarChar(5)
-  status     WorkoutStatus @default(PLANNED)
-  startedAt  DateTime?     @db.Timestamptz
-  reminderSentAt DateTime? @db.Timestamptz
-  comment    String?
-  templateId String?       @db.Uuid
-  createdAt  DateTime      @default(now()) @db.Timestamptz
+  id             String        @id @default(uuid()) @db.Uuid
+  clientId       String        @db.Uuid
+  trainerId      String        @db.Uuid
+  gymId          String        @db.Uuid
+  date           DateTime      @db.Date
+  startTime      String?       @db.VarChar(5)
+  status         WorkoutStatus @default(PLANNED)
+  startedAt      DateTime?     @db.Timestamptz
+  reminderSentAt DateTime?     @db.Timestamptz
+  comment        String?
+  templateId     String?       @db.Uuid
+  createdAt      DateTime      @default(now()) @db.Timestamptz
 
   client   Client           @relation(fields: [clientId], references: [id])
   trainer  Trainer          @relation(fields: [trainerId], references: [id])
@@ -345,6 +347,7 @@ model Workout {
   @@index([gymId, date])
   @@index([status])
   @@index([status, startedAt])
+  @@index([date])
 }
 
 model WorkoutItem {
@@ -365,6 +368,7 @@ model WorkoutItem {
   @@index([workoutId])
   @@index([exerciseId])
   @@index([equipmentId])
+  @@index([equipmentId, workoutId])
 }
 
 model WorkoutItemResult {
@@ -380,20 +384,20 @@ model WorkoutItemResult {
 }
 
 model NutritionRecommendation {
-  id        String        @id @default(uuid()) @db.Uuid
-  clientId  String        @db.Uuid
-  trainerId String        @db.Uuid
-  type      NutritionType
-  kcal      Float?
-  protein   Float?
-  fat       Float?
-  carbs     Float?
-  comment   String?
-  validFrom DateTime?     @db.Date
-  validTo   DateTime?     @db.Date
-  isActive  Boolean       @default(true)
-  archivedAt DateTime?    @db.Timestamptz
-  createdAt DateTime      @default(now()) @db.Timestamptz
+  id         String        @id @default(uuid()) @db.Uuid
+  clientId   String        @db.Uuid
+  trainerId  String        @db.Uuid
+  type       NutritionType
+  kcal       Float?
+  protein    Float?
+  fat        Float?
+  carbs      Float?
+  comment    String?
+  validFrom  DateTime?     @db.Date
+  validTo    DateTime?     @db.Date
+  isActive   Boolean       @default(true)
+  archivedAt DateTime?     @db.Timestamptz
+  createdAt  DateTime      @default(now()) @db.Timestamptz
 
   client  Client  @relation(fields: [clientId], references: [id])
   trainer Trainer @relation(fields: [trainerId], references: [id])
@@ -465,6 +469,7 @@ model NotificationRecipient {
 
   @@unique([notificationId, userId])
   @@index([userId, readAt])
+  @@index([userId])
 }
 
 model RefreshToken {

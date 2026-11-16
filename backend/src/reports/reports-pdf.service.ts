@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { dateStringInTimezone } from '../common/timezone';
 import { ReportPdfQueryDto } from './dto/report-pdf-query.dto';
+import { ReportsService } from './reports.service';
 
 interface Period {
   from: Date;
@@ -31,11 +32,22 @@ interface TableColumn {
   fraction: number;
 }
 
-const FONT_PATH = join(process.cwd(), 'assets', 'DejaVuSans.ttf');
+const FONT_CANDIDATES = [
+  join(process.cwd(), 'assets', 'DejaVuSans.ttf'),
+  join(__dirname, '..', '..', '..', 'assets', 'DejaVuSans.ttf'),
+  join(__dirname, '..', '..', 'assets', 'DejaVuSans.ttf'),
+];
+
+function resolveFontPath(): string | null {
+  return FONT_CANDIDATES.find((candidate) => existsSync(candidate)) ?? null;
+}
 
 @Injectable()
 export class ReportsPdfService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reportsService: ReportsService,
+  ) {}
 
   async weightPdf(
     userId: string,
@@ -129,6 +141,113 @@ export class ReportsPdfService {
     );
   }
 
+  async attendancePdf(
+    userId: string,
+    role: string,
+    query: ReportPdfQueryDto,
+  ): Promise<Buffer> {
+    const period = this.resolvePeriod(query, this.reportTimezone());
+    const report = await this.reportsService.attendance(userId, role, {
+      from: this.dateKey(period.from),
+      to: this.dateKey(period.to),
+      gym_id: query.gym_id,
+      trainer_id: query.trainer_id,
+      client_id: query.client_id,
+      group_by: 'day',
+    });
+    const rows: string[][] = [
+      ['Всего посещений', String(report.totalVisits), ''],
+      ['Уникальных клиентов', String(report.uniqueClients), ''],
+      ...report.byClient.map((item) => [
+        item.clientName,
+        String(item.visits),
+        item.lastVisitDate,
+      ]),
+    ];
+
+    return this.renderTable(
+      'Отчёт по посещаемости',
+      period.label,
+      [
+        { title: 'Клиент', fraction: 0.6 },
+        { title: 'Посещений', fraction: 0.2 },
+        { title: 'Последний визит', fraction: 0.2 },
+      ],
+      rows,
+    );
+  }
+
+  async equipmentPdf(
+    userId: string,
+    role: string,
+    query: ReportPdfQueryDto,
+  ): Promise<Buffer> {
+    const period = this.resolvePeriod(query, this.reportTimezone());
+    const report = await this.reportsService.equipmentUsage(userId, role, {
+      from: this.dateKey(period.from),
+      to: this.dateKey(period.to),
+      gym_id: query.gym_id,
+      trainer_id: query.trainer_id,
+      client_id: query.client_id,
+      group_by: 'equipment',
+      period: 'day',
+    });
+    const rows: string[][] = [
+      ['Всего использований', String(report.totalUsage), '', ''],
+      ...report.byEquipment.map((item) => [
+        item.equipmentName,
+        item.type,
+        String(item.usageCount),
+        `${(item.share * 100).toFixed(1)}%`,
+      ]),
+    ];
+
+    return this.renderTable(
+      'Отчёт по использованию тренажёров',
+      period.label,
+      [
+        { title: 'Тренажёр', fraction: 0.5 },
+        { title: 'Тип', fraction: 0.2 },
+        { title: 'Использований', fraction: 0.18 },
+        { title: 'Доля', fraction: 0.12 },
+      ],
+      rows,
+    );
+  }
+
+  async trainersPdf(
+    userId: string,
+    role: string,
+    query: ReportPdfQueryDto,
+  ): Promise<Buffer> {
+    const period = this.resolvePeriod(query, this.reportTimezone());
+    const report = await this.reportsService.trainersReport(userId, role, {
+      from: this.dateKey(period.from),
+      to: this.dateKey(period.to),
+      gym_id: query.gym_id,
+      trainer_id: query.trainer_id,
+    });
+    const rows: string[][] =
+      report.length === 0
+        ? [['За выбранный период данных нет.', '', '']]
+        : report.map((item) => [
+            item.trainerName,
+            String(item.visits),
+            String(item.uniqueClients),
+          ]);
+
+    return this.renderTable(
+      'Отчёт по тренерам',
+      period.label,
+      [
+        { title: 'Тренер', fraction: 0.6 },
+        { title: 'Посещений', fraction: 0.2 },
+        { title: 'Клиентов', fraction: 0.2 },
+      ],
+      rows,
+    );
+  }
+
   private async resolveClient(
     userId: string,
     role: string,
@@ -189,16 +308,16 @@ export class ReportsPdfService {
       trainerId = trainer.id;
     }
 
-    if (role === Role.RECEPTION) {
-      const reception = await this.prisma.reception.findUnique({
+    if (role === Role.ADMINISTRATOR) {
+      const administrator = await this.prisma.administrator.findUnique({
         where: { userId },
         select: { gymId: true },
       });
-      const link = reception
+      const link = administrator
         ? await this.prisma.clientGym.findFirst({
             where: {
               clientId,
-              gymId: reception.gymId,
+              gymId: administrator.gymId,
               isActive: true,
             },
             select: { id: true },
@@ -267,6 +386,22 @@ export class ReportsPdfService {
       };
     }
 
+    if (preset === 'previousWeek') {
+      const weekday = (today.getUTCDay() + 6) % 7;
+      const monday = new Date(today);
+      monday.setUTCDate(today.getUTCDate() - weekday - 7);
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+
+      return {
+        from: monday,
+        to: new Date(`${sunday.toISOString().slice(0, 10)}T23:59:59.999Z`),
+        label: `${monday.toISOString().slice(0, 10)} — ${sunday
+          .toISOString()
+          .slice(0, 10)}`,
+      };
+    }
+
     if (preset === '3months') {
       from = new Date(Date.UTC(year, month - 2, 1));
     } else if (preset === 'year') {
@@ -286,6 +421,20 @@ export class ReportsPdfService {
     };
   }
 
+  private reportTimezone(): string {
+    const timezone = process.env.DEFAULT_TIMEZONE ?? 'UTC';
+    try {
+      dateStringInTimezone(new Date(), timezone);
+      return timezone;
+    } catch {
+      return 'UTC';
+    }
+  }
+
+  private dateKey(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
   private renderTable(
     title: string,
     periodLabel: string,
@@ -293,7 +442,9 @@ export class ReportsPdfService {
     rows: string[][],
   ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      if (!existsSync(FONT_PATH)) {
+      const fontPath = resolveFontPath();
+
+      if (!fontPath) {
         reject(new InternalServerErrorException('PDF font is not available'));
         return;
       }
@@ -305,7 +456,7 @@ export class ReportsPdfService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      doc.registerFont('DejaVu', FONT_PATH);
+      doc.registerFont('DejaVu', fontPath);
       doc.font('DejaVu');
 
       const left = doc.page.margins.left;

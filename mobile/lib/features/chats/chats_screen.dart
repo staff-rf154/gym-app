@@ -25,9 +25,32 @@ class ChatsScreen extends ConsumerWidget {
       ),
       _ => const Center(child: CircularProgressIndicator()),
     };
+    final role = ref.watch(authControllerProvider).value?.role;
+    final content = role == 'CLIENT' || role == 'TRAINER'
+        ? Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _startAdministratorChat(
+                      context,
+                      ref,
+                      type: role == 'TRAINER' ? 'TRAINER_ADMIN' : 'CLIENT_ADMIN',
+                    ),
+                    icon: const Icon(Icons.support_agent),
+                    label: const Text('Написать администратору'),
+                  ),
+                ),
+              ),
+              Expanded(child: body),
+            ],
+          )
+        : body;
 
     if (embedded) {
-      return body;
+      return content;
     }
 
     return Scaffold(
@@ -41,7 +64,7 @@ class ChatsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: body,
+      body: content,
     );
   }
 }
@@ -83,27 +106,30 @@ class _ChatsList extends ConsumerWidget {
             leading: CircleAvatar(child: Text(_initial(chat.peerName))),
             title: Text(chat.peerName),
             subtitle: Text(
-              chat.isBlocked
-                  ? 'Переписка заблокирована'
-                  : chat.lastMessage ?? 'Нет сообщений',
+              [
+                if (chat.peerRoleLabel != null) chat.peerRoleLabel!,
+                chat.isBlocked
+                    ? 'Переписка заблокирована'
+                    : chat.lastMessage ?? 'Нет сообщений',
+              ].join(' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             trailing: chat.unreadCount > 0
                 ? Badge(label: Text('${chat.unreadCount}'))
                 : const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => ChatScreen(chat: chat)),
-            ),
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ChatScreen(chat: chat),
+                ),
+              );
+              ref.invalidate(chatsProvider);
+            },
           );
         },
       ),
     );
-  }
-
-  static String _initial(String name) {
-    final trimmed = name.trim();
-    return trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
   }
 
   Future<void> _startTrainerChat(
@@ -164,6 +190,96 @@ class _ChatsList extends ConsumerWidget {
           SnackBar(content: Text(apiErrorMessage(error))),
         );
       }
+    }
+  }
+}
+
+String _initial(String name) {
+  final trimmed = name.trim();
+  return trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
+}
+
+String _staffSubtitle(ChatStaffContact contact) {
+  return [
+    if (contact.roleLabel != null) contact.roleLabel!,
+    if (contact.gymName != null && contact.gymName!.isNotEmpty)
+      contact.gymName!,
+  ].join(' · ');
+}
+
+Future<void> _startAdministratorChat(
+  BuildContext context,
+  WidgetRef ref, {
+  required String type,
+}) async {
+  try {
+    final staff = await ref.read(chatApiProvider).fetchStaff();
+    if (!context.mounted) {
+      return;
+    }
+
+    if (staff.isEmpty) {
+      if (type != 'CLIENT_ADMIN') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Нет администратора зала')),
+        );
+        return;
+      }
+      final chat = await ref.read(chatApiProvider).createChat(type: type);
+      ref.invalidate(chatsProvider);
+      if (!context.mounted) {
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => ChatScreen(chat: chat)),
+      );
+      ref.invalidate(chatsProvider);
+      return;
+    }
+
+    final selected = staff.length == 1
+        ? staff.first
+        : await showModalBottomSheet<ChatStaffContact>(
+            context: context,
+            builder: (sheetContext) => SafeArea(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  const ListTile(title: Text('Выберите администратора')),
+                  for (final contact in staff)
+                    ListTile(
+                      leading: CircleAvatar(
+                        child: Text(_initial(contact.name)),
+                      ),
+                      title: Text(contact.name),
+                      subtitle: Text(_staffSubtitle(contact)),
+                      onTap: () => Navigator.of(sheetContext).pop(contact),
+                    ),
+                ],
+              ),
+            ),
+          );
+    if (selected == null || !context.mounted) {
+      return;
+    }
+
+    final chat = await ref.read(chatApiProvider).createChat(
+      type: type,
+      adminId: selected.id,
+    );
+    ref.invalidate(chatsProvider);
+    if (!context.mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => ChatScreen(chat: chat)),
+    );
+    ref.invalidate(chatsProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(apiErrorMessage(error))),
+      );
     }
   }
 }

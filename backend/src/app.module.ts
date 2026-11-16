@@ -20,11 +20,12 @@ import { HealthController } from './health/health.controller';
 import { NotificationsModule } from './notifications/notifications.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { SyncQueueModule } from './queue/sync-queue.module';
 import { CacheInvalidationInterceptor } from './redis/cache-invalidation.interceptor';
 import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
 import { RedisModule } from './redis/redis.module';
-import { ReceptionModule } from './reception/reception.module';
-import { ReceptionsModule } from './receptions/receptions.module';
+import { AdministratorModule } from './administrator/administrator.module';
+import { AdministratorsModule } from './administrators/administrators.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DemoModule } from './demo/demo.module';
 import { ReportsModule } from './reports/reports.module';
@@ -89,6 +90,7 @@ import { WorkoutsModule } from './workouts/workouts.module';
       },
     }),
     RedisModule,
+    SyncQueueModule,
     PrismaModule,
     AuthModule,
     GymsModule,
@@ -108,8 +110,8 @@ import { WorkoutsModule } from './workouts/workouts.module';
     NutritionModule,
     NotificationsModule,
     ChatsModule,
-    ReceptionsModule,
-    ReceptionModule,
+    AdministratorsModule,
+    AdministratorModule,
     DashboardModule,
     DemoModule,
     ThrottlerModule.forRootAsync({

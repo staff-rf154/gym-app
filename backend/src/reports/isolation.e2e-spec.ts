@@ -10,15 +10,15 @@ const API_PREFIX = '/api/v1';
 const TRAINER_A_PHONE = '+79990002401';
 const TRAINER_B_PHONE = '+79990002402';
 const CLIENT_PHONE = '+79990002403';
-const RECEPTION_A_PHONE = '+79990002404';
-const RECEPTION_B_PHONE = '+79990002405';
+const ADMINISTRATOR_A_PHONE = '+79990002404';
+const ADMINISTRATOR_B_PHONE = '+79990002405';
 const TEST_PASSWORD = 'TestPass123!';
 const PHONES = [
   TRAINER_A_PHONE,
   TRAINER_B_PHONE,
   CLIENT_PHONE,
-  RECEPTION_A_PHONE,
-  RECEPTION_B_PHONE,
+  ADMINISTRATOR_A_PHONE,
+  ADMINISTRATOR_B_PHONE,
 ];
 const GYM_A_NAME = 'E2E Isolation Gym A';
 const GYM_B_NAME = 'E2E Isolation Gym B';
@@ -39,8 +39,8 @@ describe('Data isolation (e2e)', () => {
   let trainerAToken: string;
   let trainerBToken: string;
   let clientToken: string;
-  let receptionAToken: string;
-  let receptionBToken: string;
+  let administratorAToken: string;
+  let administratorBToken: string;
 
   const login = async (phone: string): Promise<string> => {
     const response = await request(app.getHttpServer())
@@ -105,7 +105,7 @@ describe('Data isolation (e2e)', () => {
     await prisma.client.deleteMany({
       where: { user: { phone: CLIENT_PHONE } },
     });
-    await prisma.reception.deleteMany({
+    await prisma.administrator.deleteMany({
       where: { user: { phone: { in: PHONES } } },
     });
     await prisma.trainer.deleteMany({
@@ -183,30 +183,30 @@ describe('Data isolation (e2e)', () => {
     });
     await prisma.clientGym.create({ data: { clientId, gymId: gymAId } });
 
-    const receptionAUser = await prisma.user.create({
+    const administratorAUser = await prisma.user.create({
       data: {
-        phone: RECEPTION_A_PHONE,
+        phone: ADMINISTRATOR_A_PHONE,
         passwordHash,
-        role: Role.RECEPTION,
-        name: 'E2E Ресепшен A',
+        role: Role.ADMINISTRATOR,
+        name: 'E2E Администратор A',
         timezone: 'Europe/Moscow',
       },
     });
-    await prisma.reception.create({
-      data: { userId: receptionAUser.id, gymId: gymAId },
+    await prisma.administrator.create({
+      data: { userId: administratorAUser.id, gymId: gymAId },
     });
 
-    const receptionBUser = await prisma.user.create({
+    const administratorBUser = await prisma.user.create({
       data: {
-        phone: RECEPTION_B_PHONE,
+        phone: ADMINISTRATOR_B_PHONE,
         passwordHash,
-        role: Role.RECEPTION,
-        name: 'E2E Ресепшен B',
+        role: Role.ADMINISTRATOR,
+        name: 'E2E Администратор B',
         timezone: 'Europe/Moscow',
       },
     });
-    await prisma.reception.create({
-      data: { userId: receptionBUser.id, gymId: gymBId },
+    await prisma.administrator.create({
+      data: { userId: administratorBUser.id, gymId: gymBId },
     });
 
     exerciseId = (
@@ -304,8 +304,8 @@ describe('Data isolation (e2e)', () => {
     trainerAToken = await login(TRAINER_A_PHONE);
     trainerBToken = await login(TRAINER_B_PHONE);
     clientToken = await login(CLIENT_PHONE);
-    receptionAToken = await login(RECEPTION_A_PHONE);
-    receptionBToken = await login(RECEPTION_B_PHONE);
+    administratorAToken = await login(ADMINISTRATOR_A_PHONE);
+    administratorBToken = await login(ADMINISTRATOR_B_PHONE);
   });
 
   afterAll(async () => {
@@ -321,7 +321,7 @@ describe('Data isolation (e2e)', () => {
     await prisma.clientTrainer.deleteMany({ where: { clientId } });
     await prisma.clientGym.deleteMany({ where: { clientId } });
     await prisma.client.deleteMany({ where: { id: clientId } });
-    await prisma.reception.deleteMany({
+    await prisma.administrator.deleteMany({
       where: { user: { phone: { in: PHONES } } },
     });
     await prisma.trainer.deleteMany({
@@ -426,9 +426,9 @@ describe('Data isolation (e2e)', () => {
     expect(response.body).toHaveLength(2);
   });
 
-  it('RECEPTION своего зала может скачать PDF клиента в табличной форме', async () => {
+  it('ADMINISTRATOR своего зала может скачать PDF клиента в табличной форме', async () => {
     const response = await authedGetPdf(
-      receptionAToken,
+      administratorAToken,
       `/reports/pdf/weight?client_id=${clientId}&from=2026-11-01&to=2026-11-30`,
     );
 
@@ -441,9 +441,9 @@ describe('Data isolation (e2e)', () => {
     expect((response.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
   });
 
-  it('RECEPTION чужого зала получает 403 на PDF клиента', async () => {
+  it('ADMINISTRATOR чужого зала получает 403 на PDF клиента', async () => {
     const response = await authedGetPdf(
-      receptionBToken,
+      administratorBToken,
       `/reports/pdf/weight?client_id=${clientId}&from=2026-11-01&to=2026-11-30`,
     );
 

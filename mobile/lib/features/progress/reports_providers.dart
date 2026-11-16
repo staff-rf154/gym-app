@@ -8,27 +8,41 @@ final reportsApiProvider = Provider<ReportsApi>(
   (ref) => ReportsApi(ref.watch(apiClientProvider)),
 );
 
+typedef ReportRangeKey = ({String clientId, DateTime? from, DateTime? to});
+
 final weightDynamicsProvider =
-    FutureProvider.autoDispose.family<List<WeightDynamicsPoint>, String>(
-      (ref, clientId) =>
-          ref.watch(reportsApiProvider).fetchWeightDynamics(clientId),
+    FutureProvider.autoDispose.family<List<WeightDynamicsPoint>, ReportRangeKey>(
+      (ref, params) => ref
+          .watch(reportsApiProvider)
+          .fetchWeightDynamics(
+            params.clientId,
+            from: params.from,
+            to: params.to,
+          ),
     );
 
 final exercisesSummaryProvider =
-    FutureProvider.autoDispose.family<List<ExerciseSummaryItem>, String>(
-      (ref, clientId) =>
-          ref.watch(reportsApiProvider).fetchExercisesSummary(clientId),
+    FutureProvider.autoDispose.family<List<ExerciseSummaryItem>, ReportRangeKey>(
+      (ref, params) => ref
+          .watch(reportsApiProvider)
+          .fetchExercisesSummary(
+            params.clientId,
+            from: params.from,
+            to: params.to,
+          ),
     );
 
 final exerciseProgressProvider =
     FutureProvider.autoDispose.family<
       ExerciseProgress,
-      ({String clientId, String exerciseId})
+      ({String clientId, String exerciseId, DateTime? from, DateTime? to})
     >(
       (ref, params) => ref
           .watch(reportsApiProvider)
           .fetchExerciseProgress(
             clientId: params.clientId,
             exerciseId: params.exerciseId,
+            from: params.from,
+            to: params.to,
           ),
     );

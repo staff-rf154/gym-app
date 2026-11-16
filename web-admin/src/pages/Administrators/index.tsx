@@ -18,7 +18,7 @@ import { useCrudModal } from '../../hooks/useCrudModal';
 import { useTableSearch } from '../../hooks/useTableSearch';
 import { formatDate } from '../../utils/format';
 
-interface Reception {
+interface Administrator {
   id: string;
   userId: string;
   phone: string;
@@ -28,7 +28,7 @@ interface Reception {
   createdAt: string;
 }
 
-interface ReceptionFormValues {
+interface AdministratorFormValues {
   phone: string;
   name: string;
   gym_id: string;
@@ -40,8 +40,8 @@ interface Gym {
   name: string;
 }
 
-export default function ReceptionsPage() {
-  const [form] = Form.useForm<ReceptionFormValues>();
+export default function AdministratorsPage() {
+  const [form] = Form.useForm<AdministratorFormValues>();
   const queryClient = useQueryClient();
   const {
     open: isModalOpen,
@@ -49,23 +49,23 @@ export default function ReceptionsPage() {
     openCreate,
     openEdit,
     close,
-  } = useCrudModal<Reception>();
+  } = useCrudModal<Administrator>();
 
   const {
-    data: receptions = [],
+    data: administrators = [],
     isLoading,
     isError,
     refetch,
   } = useQuery({
-    queryKey: ['receptions'],
+    queryKey: ['administrators'],
     queryFn: async () => {
-      const { data } = await api.get<Reception[]>('/admin/receptions');
+      const { data } = await api.get<Administrator[]>('/admin/administrators');
       return data;
     },
   });
 
   const { searchValue, setSearchValue, filteredRows } =
-    useTableSearch(receptions);
+    useTableSearch(administrators);
 
   const { data: gyms = [] } = useQuery({
     queryKey: ['gyms'],
@@ -76,13 +76,13 @@ export default function ReceptionsPage() {
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['receptions'] });
+    queryClient.invalidateQueries({ queryKey: ['administrators'] });
   };
 
   const createMutation = useMutation({
-    mutationFn: async (values: ReceptionFormValues) => {
-      const { data } = await api.post<Reception & { initial_password?: string }>(
-        '/admin/receptions',
+    mutationFn: async (values: AdministratorFormValues) => {
+      const { data } = await api.post<Administrator & { initial_password?: string }>(
+        '/admin/administrators',
         values,
       );
       return data;
@@ -93,11 +93,11 @@ export default function ReceptionsPage() {
       form.resetFields();
       message.success(
         data.initial_password
-          ? `Ресепшен создан. Пароль: ${data.initial_password}`
-          : 'Ресепшен создан',
+          ? `Администратор создан. Пароль: ${data.initial_password}`
+          : 'Администратор создан',
       );
     },
-    onError: () => message.error('Не удалось создать ресепшен'),
+    onError: () => message.error('Не удалось создать администратора'),
   });
 
   const updateMutation = useMutation({
@@ -106,10 +106,10 @@ export default function ReceptionsPage() {
       values,
     }: {
       id: string;
-      values: ReceptionFormValues;
+      values: AdministratorFormValues;
     }) => {
-      const { data } = await api.put<Reception>(
-        `/admin/receptions/${id}`,
+      const { data } = await api.put<Administrator>(
+        `/admin/administrators/${id}`,
         values.password ? values : { ...values, password: undefined },
       );
       return data;
@@ -118,20 +118,20 @@ export default function ReceptionsPage() {
       invalidate();
       close();
       form.resetFields();
-      message.success('Ресепшен обновлён');
+      message.success('Администратор обновлён');
     },
-    onError: () => message.error('Не удалось обновить ресепшен'),
+    onError: () => message.error('Не удалось обновить администратора'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/admin/receptions/${id}`);
+      await api.delete(`/admin/administrators/${id}`);
     },
     onSuccess: () => {
       invalidate();
-      message.success('Ресепшен удалён');
+      message.success('Администратор удалён');
     },
-    onError: () => message.error('Не удалось удалить ресепшен'),
+    onError: () => message.error('Не удалось удалить администратора'),
   });
 
   const openCreateModal = () => {
@@ -139,7 +139,7 @@ export default function ReceptionsPage() {
     openCreate();
   };
 
-  const openEditModal = (item: Reception) => {
+  const openEditModal = (item: Administrator) => {
     form.setFieldsValue({
       phone: item.phone,
       name: item.name,
@@ -154,7 +154,7 @@ export default function ReceptionsPage() {
     form.resetFields();
   };
 
-  const columns: ColumnsType<Reception> = [
+  const columns: ColumnsType<Administrator> = [
     { title: 'ФИО', dataIndex: 'name', key: 'name' },
     { title: 'Телефон', dataIndex: 'phone', key: 'phone' },
     { title: 'Зал', dataIndex: 'gymName', key: 'gymName' },
@@ -174,7 +174,7 @@ export default function ReceptionsPage() {
             Редактировать
           </Button>
           <Popconfirm
-            title="Удалить ресепшен?"
+            title="Удалить администратора?"
             okText="Удалить"
             cancelText="Отмена"
             onConfirm={() => deleteMutation.mutate(item.id)}
@@ -200,7 +200,7 @@ export default function ReceptionsPage() {
         />
 
         <Button type="primary" onClick={openCreateModal}>
-          Добавить ресепшен
+          Добавить администратора
         </Button>
       </Space>
 
@@ -208,7 +208,7 @@ export default function ReceptionsPage() {
         <Alert
           type="error"
           showIcon
-          message="Не удалось загрузить ресепшены"
+          message="Не удалось загрузить администраторов"
           action={
             <Button size="small" onClick={() => void refetch()}>
               Повторить
@@ -217,10 +217,10 @@ export default function ReceptionsPage() {
         />
       )}
 
-      {!isLoading && !isError && receptions.length === 0 ? (
-        <Empty description="Ресепшенов пока нет" />
+      {!isLoading && !isError && administrators.length === 0 ? (
+        <Empty description="Администраторов пока нет" />
       ) : (
-        <Table<Reception>
+        <Table<Administrator>
           rowKey="id"
           columns={columns}
           dataSource={filteredRows}
@@ -230,14 +230,14 @@ export default function ReceptionsPage() {
       )}
 
       <Modal
-        title={editing ? 'Редактировать ресепшен' : 'Новый ресепшен'}
+        title={editing ? 'Редактировать администратора' : 'Новый администратор'}
         open={isModalOpen}
         onCancel={closeModal}
         onOk={() => form.submit()}
         confirmLoading={createMutation.isPending || updateMutation.isPending}
         forceRender
       >
-        <Form<ReceptionFormValues>
+        <Form<AdministratorFormValues>
           form={form}
           layout="vertical"
           onFinish={(values) =>

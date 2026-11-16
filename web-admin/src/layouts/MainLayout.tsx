@@ -2,6 +2,7 @@ import { Button, Layout, Menu, Space, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/client';
+import QuickActions from '../components/QuickActions';
 import { useAuthStore } from '../store/auth';
 
 const { Header, Sider, Content } = Layout;
@@ -14,7 +15,7 @@ const adminMenuItems: MenuProps['items'] = [
   { key: 'reports/attendance', label: 'Отчёт: посещаемость' },
   { key: 'reports/equipment', label: 'Отчёт: тренажёры' },
   { key: 'reports/trainers', label: 'Отчёт: тренеры' },
-  { key: 'receptions', label: 'Ресепшены' },
+  { key: 'administrators', label: 'Администраторы' },
   { key: 'gyms', label: 'Залы' },
   { key: 'equipment', label: 'Тренажёры' },
   { key: 'exercises', label: 'Упражнения' },
@@ -25,10 +26,11 @@ const adminMenuItems: MenuProps['items'] = [
   { key: 'settings', label: 'Настройки' },
 ];
 
-const receptionMenuItems: MenuProps['items'] = [
-  { key: 'reception/clients', label: 'Клиенты' },
-  { key: 'reception/trainers', label: 'Тренеры' },
-  { key: 'reception/templates', label: 'Шаблоны' },
+const administratorMenuItems: MenuProps['items'] = [
+  { key: 'administrator/clients', label: 'Клиенты' },
+  { key: 'administrator/trainers', label: 'Тренеры' },
+  { key: 'administrator/templates', label: 'Шаблоны' },
+  { key: 'chats', label: 'Чаты' },
   { key: 'reports/attendance', label: 'Отчёт: посещаемость' },
   { key: 'reports/equipment', label: 'Отчёт: тренажёры' },
   { key: 'reports/trainers', label: 'Отчёт: тренеры' },
@@ -46,10 +48,10 @@ export default function MainLayout() {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
 
-  const isReception = user?.role === 'RECEPTION';
+  const isAdministrator = user?.role === 'ADMINISTRATOR';
   const isTrainer = user?.role === 'TRAINER';
-  const menuItems = isReception
-    ? receptionMenuItems
+  const menuItems = isAdministrator
+    ? administratorMenuItems
     : isTrainer
       ? trainerMenuItems
       : adminMenuItems;
@@ -80,8 +82,8 @@ export default function MainLayout() {
             fontWeight: 600,
           }}
         >
-          {isReception
-            ? 'Gym Reception'
+          {isAdministrator
+            ? 'Gym Administrator'
             : isTrainer
               ? 'Gym Trainer'
               : 'Gym Admin'}
@@ -113,6 +115,17 @@ export default function MainLayout() {
         </Header>
 
         <Content style={{ margin: 24 }}>
+          <div
+            style={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+              background: '#f5f5f5',
+              paddingBottom: 12,
+            }}
+          >
+            <QuickActions />
+          </div>
           <Outlet />
         </Content>
       </Layout>

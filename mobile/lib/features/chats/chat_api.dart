@@ -24,6 +24,7 @@ class ChatApi {
     required String type,
     String? clientId,
     String? trainerId,
+    String? adminId,
   }) async {
     final response = await _apiClient.dio.post<Map<String, dynamic>>(
       '/chats',
@@ -31,9 +32,18 @@ class ChatApi {
         'type': type,
         if (clientId != null && clientId.isNotEmpty) 'client_id': clientId,
         if (trainerId != null && trainerId.isNotEmpty) 'trainer_id': trainerId,
+        if (adminId != null && adminId.isNotEmpty) 'admin_id': adminId,
       },
     );
     return ChatSummary.fromJson(response.data!);
+  }
+
+  Future<List<ChatStaffContact>> fetchStaff() async {
+    final response = await _apiClient.dio.get<List<dynamic>>('/chats/staff');
+    return (response.data ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(ChatStaffContact.fromJson)
+        .toList();
   }
 
   Future<List<ClientTrainerOption>> fetchClientTrainers() async {

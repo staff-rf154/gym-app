@@ -49,7 +49,7 @@ export class WeightMeasurementsService {
     return this.createMeasurement(userId, clientId, dto);
   }
 
-  async findAllForReception(
+  async findAllForAdministrator(
     clientId: string,
     gymId: string,
   ): Promise<WeightMeasurement[]> {
@@ -58,7 +58,7 @@ export class WeightMeasurementsService {
     return this.findByClient(clientId);
   }
 
-  async createForReception(
+  async createForAdministrator(
     userId: string,
     clientId: string,
     gymId: string,

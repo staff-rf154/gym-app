@@ -9,23 +9,23 @@ import { PrismaService } from '../prisma/prisma.service';
 const API_PREFIX = '/api/v1';
 const PHONE_PREFIX = '+799900020';
 const ADMIN_PHONE = `${PHONE_PREFIX}01`;
-const RECEPTION_A_PHONE = `${PHONE_PREFIX}02`;
-const RECEPTION_B_PHONE = `${PHONE_PREFIX}03`;
+const ADMINISTRATOR_A_PHONE = `${PHONE_PREFIX}02`;
+const ADMINISTRATOR_B_PHONE = `${PHONE_PREFIX}03`;
 const CLIENT_PHONE = `${PHONE_PREFIX}10`;
 const TRAINER_PHONE = `${PHONE_PREFIX}11`;
 const TEST_PASSWORD = 'TestPass123!';
-const GYM_PREFIX = 'E2E Reception Gym';
+const GYM_PREFIX = 'E2E Administrator Gym';
 
-describe('Reception isolation and access revocation (e2e)', () => {
+describe('Administrator isolation and access revocation (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let adminToken: string;
-  let receptionAToken: string;
-  let receptionBToken: string;
+  let administratorAToken: string;
+  let administratorBToken: string;
   let gymAId: string;
   let gymBId: string;
-  let receptionAId: string;
-  let receptionBId: string;
+  let administratorAId: string;
+  let administratorBId: string;
   let clientId: string;
   let trainerId: string;
   let linkId: string;
@@ -54,7 +54,7 @@ describe('Reception isolation and access revocation (e2e)', () => {
     await prisma.trainerGym.deleteMany({
       where: { trainer: { user: { phone: { startsWith: PHONE_PREFIX } } } },
     });
-    await prisma.reception.deleteMany({
+    await prisma.administrator.deleteMany({
       where: { user: { phone: { startsWith: PHONE_PREFIX } } },
     });
     await prisma.refreshToken.deleteMany({
@@ -118,7 +118,7 @@ describe('Reception isolation and access revocation (e2e)', () => {
         phone: ADMIN_PHONE,
         passwordHash,
         role: Role.ADMIN,
-        name: 'E2E Reception Admin',
+        name: 'E2E Administrator Admin',
       },
     });
 
@@ -134,29 +134,29 @@ describe('Reception isolation and access revocation (e2e)', () => {
     adminToken = await login(ADMIN_PHONE);
 
     const responseA = await authed(adminToken)
-      .post('/admin/receptions')
+      .post('/admin/administrators')
       .send({
-        phone: RECEPTION_A_PHONE,
-        name: 'Ресепшен A',
+        phone: ADMINISTRATOR_A_PHONE,
+        name: 'Администратор A',
         gym_id: gymAId,
         password: TEST_PASSWORD,
       })
       .expect(201);
-    receptionAId = responseA.body.id as string;
+    administratorAId = responseA.body.id as string;
 
     const responseB = await authed(adminToken)
-      .post('/admin/receptions')
+      .post('/admin/administrators')
       .send({
-        phone: RECEPTION_B_PHONE,
-        name: 'Ресепшен B',
+        phone: ADMINISTRATOR_B_PHONE,
+        name: 'Администратор B',
         gym_id: gymBId,
         password: TEST_PASSWORD,
       })
       .expect(201);
-    receptionBId = responseB.body.id as string;
+    administratorBId = responseB.body.id as string;
 
-    receptionAToken = await login(RECEPTION_A_PHONE);
-    receptionBToken = await login(RECEPTION_B_PHONE);
+    administratorAToken = await login(ADMINISTRATOR_A_PHONE);
+    administratorBToken = await login(ADMINISTRATOR_B_PHONE);
   });
 
   afterAll(async () => {
@@ -164,25 +164,25 @@ describe('Reception isolation and access revocation (e2e)', () => {
     await app.close();
   });
 
-  it('admin creates receptions bound to gyms', async () => {
-    const response = await authed(adminToken).get('/admin/receptions').expect(200);
+  it('admin creates administrators bound to gyms', async () => {
+    const response = await authed(adminToken).get('/admin/administrators').expect(200);
     const ids = (response.body as { id: string }[]).map((item) => item.id);
 
-    expect(ids).toEqual(expect.arrayContaining([receptionAId, receptionBId]));
+    expect(ids).toEqual(expect.arrayContaining([administratorAId, administratorBId]));
   });
 
-  it('reception sees only its own gym', async () => {
-    const response = await authed(receptionAToken)
-      .get('/reception/gyms')
+  it('administrator sees only its own gym', async () => {
+    const response = await authed(administratorAToken)
+      .get('/administrator/gyms')
       .expect(200);
 
     expect(response.body).toMatchObject({ id: gymAId });
     expect(response.body.id).not.toBe(gymBId);
   });
 
-  it('reception creates client and trainer inside its gym', async () => {
-    const clientResponse = await authed(receptionAToken)
-      .post('/reception/clients')
+  it('administrator creates client and trainer inside its gym', async () => {
+    const clientResponse = await authed(administratorAToken)
+      .post('/administrator/clients')
       .send({ name: 'E2E Клиент', phone: CLIENT_PHONE })
       .expect(201);
     clientId = clientResponse.body.id as string;
@@ -190,8 +190,8 @@ describe('Reception isolation and access revocation (e2e)', () => {
       expect.objectContaining({ gymId: gymAId, isActive: true }),
     ]);
 
-    const trainerResponse = await authed(receptionAToken)
-      .post('/reception/trainers')
+    const trainerResponse = await authed(administratorAToken)
+      .post('/administrator/trainers')
       .send({ name: 'E2E Тренер', phone: TRAINER_PHONE })
       .expect(201);
     trainerId = trainerResponse.body.id as string;
@@ -200,9 +200,9 @@ describe('Reception isolation and access revocation (e2e)', () => {
     ]);
   });
 
-  it('reception links trainer with assignedBy RECEPTION', async () => {
-    const response = await authed(receptionAToken)
-      .post(`/reception/clients/${clientId}/trainers`)
+  it('administrator links trainer with assignedBy ADMINISTRATOR', async () => {
+    const response = await authed(administratorAToken)
+      .post(`/administrator/clients/${clientId}/trainers`)
       .send({ trainer_id: trainerId })
       .expect(201);
 
@@ -211,43 +211,43 @@ describe('Reception isolation and access revocation (e2e)', () => {
       trainerId,
       gymId: gymAId,
       isActive: true,
-      assignedBy: 'RECEPTION',
+      assignedBy: 'ADMINISTRATOR',
     });
 
-    const list = await authed(receptionAToken)
-      .get(`/reception/clients/${clientId}/trainers`)
+    const list = await authed(administratorAToken)
+      .get(`/administrator/clients/${clientId}/trainers`)
       .expect(200);
     expect(list.body).toHaveLength(1);
   });
 
-  it('other reception cannot read or modify foreign client', async () => {
-    const clients = await authed(receptionBToken)
-      .get('/reception/clients')
+  it('other administrator cannot read or modify foreign client', async () => {
+    const clients = await authed(administratorBToken)
+      .get('/administrator/clients')
       .expect(200);
     expect(clients.body.items).toEqual([]);
 
-    await authed(receptionBToken)
-      .put(`/reception/clients/${clientId}`)
+    await authed(administratorBToken)
+      .put(`/administrator/clients/${clientId}`)
       .send({ name: 'Взлом' })
       .expect(403);
 
-    await authed(receptionBToken)
-      .post(`/reception/clients/${clientId}/trainers`)
+    await authed(administratorBToken)
+      .post(`/administrator/clients/${clientId}/trainers`)
       .send({ trainer_id: trainerId })
       .expect(403);
 
-    await authed(receptionBToken)
-      .get(`/reception/clients/${clientId}/trainers`)
+    await authed(administratorBToken)
+      .get(`/administrator/clients/${clientId}/trainers`)
       .expect(403);
   });
 
   it('unlink trainer revokes access', async () => {
-    await authed(receptionAToken)
-      .delete(`/reception/clients/${clientId}/trainers/${linkId}`)
+    await authed(administratorAToken)
+      .delete(`/administrator/clients/${clientId}/trainers/${linkId}`)
       .expect(204);
 
-    const list = await authed(receptionAToken)
-      .get(`/reception/clients/${clientId}/trainers`)
+    const list = await authed(administratorAToken)
+      .get(`/administrator/clients/${clientId}/trainers`)
       .expect(200);
     expect(list.body).toEqual([]);
 
@@ -257,18 +257,18 @@ describe('Reception isolation and access revocation (e2e)', () => {
     expect(link?.isActive).toBe(false);
   });
 
-  it('admin removes reception together with its user', async () => {
+  it('admin removes administrator together with its user', async () => {
     await authed(adminToken)
-      .delete(`/admin/receptions/${receptionBId}`)
+      .delete(`/admin/administrators/${administratorBId}`)
       .expect(204);
 
-    const reception = await prisma.reception.findUnique({
-      where: { id: receptionBId },
+    const administrator = await prisma.administrator.findUnique({
+      where: { id: administratorBId },
     });
     const user = await prisma.user.findUnique({
-      where: { phone: RECEPTION_B_PHONE },
+      where: { phone: ADMINISTRATOR_B_PHONE },
     });
-    expect(reception).toBeNull();
+    expect(administrator).toBeNull();
     expect(user).toBeNull();
   });
 });

@@ -185,43 +185,68 @@ class ClientWorkout {
   bool get isLocked => isTerminal;
 }
 
-enum WorkoutPeriod { thisWeek, all, thisMonth, previousMonth, lastThreeMonths }
+enum WorkoutPeriod {
+  thisWeek,
+  previousWeek,
+  thisMonth,
+  previousMonth,
+  lastThreeMonths,
+  all,
+}
 
 String workoutPeriodLabel(WorkoutPeriod period) {
   return switch (period) {
     WorkoutPeriod.thisWeek => 'Текущая неделя',
-    WorkoutPeriod.all => 'Всё время',
+    WorkoutPeriod.previousWeek => 'Прошлая неделя',
     WorkoutPeriod.thisMonth => 'Этот месяц',
     WorkoutPeriod.previousMonth => 'Прошлый месяц',
     WorkoutPeriod.lastThreeMonths => '3 месяца',
+    WorkoutPeriod.all => 'Всё время',
   };
 }
 
-bool matchesWorkoutPeriod(String date, WorkoutPeriod period, {DateTime? now}) {
-  if (period == WorkoutPeriod.all) {
-    return true;
-  }
-  final value = DateTime.tryParse(date);
-  if (value == null) {
-    return false;
-  }
+({DateTime from, DateTime to}) workoutPeriodRange(
+  WorkoutPeriod period, {
+  DateTime? now,
+}) {
   final today = now ?? DateTime.now();
   final dayStart = DateTime(today.year, today.month, today.day);
   final weekStart = dayStart.subtract(Duration(days: dayStart.weekday - 1));
   final monthStart = DateTime(today.year, today.month);
   final from = switch (period) {
     WorkoutPeriod.thisWeek => weekStart,
+    WorkoutPeriod.previousWeek => weekStart.subtract(const Duration(days: 7)),
     WorkoutPeriod.thisMonth => monthStart,
     WorkoutPeriod.previousMonth => DateTime(today.year, today.month - 1),
     WorkoutPeriod.lastThreeMonths => DateTime(today.year, today.month - 2),
     WorkoutPeriod.all => DateTime(2020),
   };
   final to = switch (period) {
-    WorkoutPeriod.thisWeek => weekStart.add(const Duration(days: 7)),
-    WorkoutPeriod.previousMonth => monthStart,
-    _ => DateTime(today.year, today.month + 1),
+    WorkoutPeriod.thisWeek => weekStart.add(const Duration(days: 6)),
+    WorkoutPeriod.previousWeek => weekStart.subtract(const Duration(days: 1)),
+    WorkoutPeriod.previousMonth => DateTime(today.year, today.month, 0),
+    WorkoutPeriod.lastThreeMonths => DateTime(today.year, today.month + 1, 0),
+    WorkoutPeriod.all => DateTime(today.year + 1, 12, 31),
+    _ => DateTime(today.year, today.month + 1, 0),
   };
-  return !value.isBefore(from) && value.isBefore(to);
+  return (from: from, to: to);
+}
+
+bool matchesPeriod(DateTime value, WorkoutPeriod period, {DateTime? now}) {
+  if (period == WorkoutPeriod.all) {
+    return true;
+  }
+  final date = DateTime(value.year, value.month, value.day);
+  final range = workoutPeriodRange(period, now: now);
+  return !date.isBefore(range.from) && !date.isAfter(range.to);
+}
+
+bool matchesWorkoutPeriod(String date, WorkoutPeriod period, {DateTime? now}) {
+  final value = DateTime.tryParse(date);
+  if (value == null) {
+    return false;
+  }
+  return matchesPeriod(value, period, now: now);
 }
 
 class WorkoutItemResultInput {

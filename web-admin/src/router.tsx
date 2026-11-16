@@ -15,25 +15,25 @@ import NotificationsPage from './pages/Notifications';
 import ChatsPage from './pages/Chats';
 import SettingsPage from './pages/Settings';
 import Forbidden from './pages/Forbidden';
-import ReceptionsPage from './pages/Receptions';
+import AdministratorsPage from './pages/Administrators';
 import GoalsPage from './pages/Goals';
 import AttendanceReportPage from './pages/Reports/Attendance';
 import EquipmentUsageReportPage from './pages/Reports/Equipment';
 import TrainersReportPage from './pages/Reports/Trainers';
-import ReceptionClientsPage from './pages/reception/Clients';
-import ReceptionTrainersPage from './pages/reception/Trainers';
+import AdministratorClientsPage from './pages/administrator/Clients';
+import AdministratorTrainersPage from './pages/administrator/Trainers';
 import MainLayout from './layouts/MainLayout';
 import api, { refreshAccessToken } from './api/client';
 import { useAuthStore, type AuthUser } from './store/auth';
 
-const ALLOWED_ROLES = ['ADMIN', 'RECEPTION', 'TRAINER'];
+const ALLOWED_ROLES = ['ADMIN', 'ADMINISTRATOR', 'TRAINER'];
 const ADMIN_HOME = '/protected/dashboard';
-const RECEPTION_HOME = '/protected/reception/clients';
+const ADMINISTRATOR_HOME = '/protected/administrator/clients';
 const TRAINER_HOME = '/protected/reports/attendance';
 
 function homeFor(role: string | undefined) {
-  if (role === 'RECEPTION') {
-    return RECEPTION_HOME;
+  if (role === 'ADMINISTRATOR') {
+    return ADMINISTRATOR_HOME;
   }
 
   if (role === 'TRAINER') {
@@ -155,7 +155,7 @@ export const router = createBrowserRouter([
           {
             path: 'dashboard',
             element: (
-              <RoleRoute roles={['ADMIN']}>
+              <RoleRoute roles={['ADMIN', 'ADMINISTRATOR']}>
                 <Dashboard />
               </RoleRoute>
             ),
@@ -195,7 +195,7 @@ export const router = createBrowserRouter([
           {
             path: 'reports/attendance',
             element: (
-              <RoleRoute roles={['ADMIN', 'RECEPTION', 'TRAINER']}>
+              <RoleRoute roles={['ADMIN', 'ADMINISTRATOR', 'TRAINER']}>
                 <AttendanceReportPage />
               </RoleRoute>
             ),
@@ -203,7 +203,7 @@ export const router = createBrowserRouter([
           {
             path: 'reports/equipment',
             element: (
-              <RoleRoute roles={['ADMIN', 'RECEPTION', 'TRAINER']}>
+              <RoleRoute roles={['ADMIN', 'ADMINISTRATOR', 'TRAINER']}>
                 <EquipmentUsageReportPage />
               </RoleRoute>
             ),
@@ -211,7 +211,7 @@ export const router = createBrowserRouter([
           {
             path: 'reports/trainers',
             element: (
-              <RoleRoute roles={['ADMIN', 'RECEPTION', 'TRAINER']}>
+              <RoleRoute roles={['ADMIN', 'ADMINISTRATOR', 'TRAINER']}>
                 <TrainersReportPage />
               </RoleRoute>
             ),
@@ -275,7 +275,7 @@ export const router = createBrowserRouter([
           {
             path: 'chats',
             element: (
-              <RoleRoute roles={['ADMIN']}>
+              <RoleRoute roles={['ADMIN', 'ADMINISTRATOR']}>
                 <ChatsPage />
               </RoleRoute>
             ),
@@ -289,41 +289,41 @@ export const router = createBrowserRouter([
             ),
           },
           {
-            path: 'receptions',
+            path: 'administrators',
             element: (
               <RoleRoute roles={['ADMIN']}>
-                <ReceptionsPage />
+                <AdministratorsPage />
               </RoleRoute>
             ),
           },
           {
-            path: 'reception/clients',
+            path: 'administrator/clients',
             element: (
-              <RoleRoute roles={['RECEPTION']}>
-                <ReceptionClientsPage />
+              <RoleRoute roles={['ADMINISTRATOR']}>
+                <AdministratorClientsPage />
               </RoleRoute>
             ),
           },
           {
-            path: 'reception/clients/:id/weight',
+            path: 'administrator/clients/:id/weight',
             element: (
-              <RoleRoute roles={['ADMIN', 'RECEPTION']}>
+              <RoleRoute roles={['ADMIN', 'ADMINISTRATOR']}>
                 <ClientWeightPage />
               </RoleRoute>
             ),
           },
           {
-            path: 'reception/trainers',
+            path: 'administrator/trainers',
             element: (
-              <RoleRoute roles={['RECEPTION']}>
-                <ReceptionTrainersPage />
+              <RoleRoute roles={['ADMINISTRATOR']}>
+                <AdministratorTrainersPage />
               </RoleRoute>
             ),
           },
           {
-            path: 'reception/templates',
+            path: 'administrator/templates',
             element: (
-              <RoleRoute roles={['RECEPTION']}>
+              <RoleRoute roles={['ADMINISTRATOR']}>
                 <TemplatesPage />
               </RoleRoute>
             ),

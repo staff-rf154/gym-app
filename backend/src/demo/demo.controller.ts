@@ -33,13 +33,13 @@ export class DemoController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Загрузить демо-данные' })
   load(): Promise<DemoLoadResult> {
-    return this.demoService.load();
+    return this.demoService.loadQueued();
   }
 
   @Delete()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Очистить демо-данные' })
   clear(): Promise<DemoClearResult> {
-    return this.demoService.clear();
+    return this.demoService.clearQueued();
   }
 }

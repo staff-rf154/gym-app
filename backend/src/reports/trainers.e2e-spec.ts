@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const API_PREFIX = '/api/v1';
 const ADMIN_PHONE = '+79990000651';
-const RECEPTION_PHONE = '+79990000652';
+const ADMINISTRATOR_PHONE = '+79990000652';
 const TRAINER_PHONE = '+79990000653';
 const OTHER_TRAINER_PHONE = '+79990000654';
 const CLIENT_PHONE = '+79990000655';
@@ -27,7 +27,7 @@ describe('Reports trainers (e2e)', () => {
   let trainerId: string;
   let otherTrainerId: string;
   let adminToken: string;
-  let receptionToken: string;
+  let administratorToken: string;
   let trainerToken: string;
   let clientToken: string;
 
@@ -60,7 +60,7 @@ describe('Reports trainers (e2e)', () => {
 
     const phones = [
       ADMIN_PHONE,
-      RECEPTION_PHONE,
+      ADMINISTRATOR_PHONE,
       TRAINER_PHONE,
       OTHER_TRAINER_PHONE,
       CLIENT_PHONE,
@@ -79,7 +79,7 @@ describe('Reports trainers (e2e)', () => {
     await prisma.clientGym.deleteMany({
       where: { gym: { name: { in: [GYM_NAME, OTHER_GYM_NAME] } } },
     });
-    await prisma.reception.deleteMany({
+    await prisma.administrator.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
     await prisma.client.deleteMany({
@@ -107,12 +107,12 @@ describe('Reports trainers (e2e)', () => {
       },
     });
 
-    const receptionUser = await prisma.user.create({
+    const administratorUser = await prisma.user.create({
       data: {
-        phone: RECEPTION_PHONE,
+        phone: ADMINISTRATOR_PHONE,
         passwordHash,
-        role: Role.RECEPTION,
-        name: 'E2E Trainers Reception',
+        role: Role.ADMINISTRATOR,
+        name: 'E2E Trainers Administrator',
       },
     });
 
@@ -127,8 +127,8 @@ describe('Reports trainers (e2e)', () => {
       })
     ).id;
 
-    await prisma.reception.create({
-      data: { userId: receptionUser.id, gymId },
+    await prisma.administrator.create({
+      data: { userId: administratorUser.id, gymId },
     });
 
     const trainerUser = await prisma.user.create({
@@ -242,7 +242,7 @@ describe('Reports trainers (e2e)', () => {
     );
 
     adminToken = await login(ADMIN_PHONE);
-    receptionToken = await login(RECEPTION_PHONE);
+    administratorToken = await login(ADMINISTRATOR_PHONE);
     trainerToken = await login(TRAINER_PHONE);
     clientToken = await login(CLIENT_PHONE);
   });
@@ -260,7 +260,7 @@ describe('Reports trainers (e2e)', () => {
     await prisma.clientGym.deleteMany({
       where: { gymId: { in: [gymId, otherGymId] } },
     });
-    await prisma.reception.deleteMany({ where: { gymId } });
+    await prisma.administrator.deleteMany({ where: { gymId } });
     await prisma.client.deleteMany({
       where: { id: { in: [clientId, otherClientId] } },
     });
@@ -274,7 +274,7 @@ describe('Reports trainers (e2e)', () => {
           phone: {
             in: [
               ADMIN_PHONE,
-              RECEPTION_PHONE,
+              ADMINISTRATOR_PHONE,
               TRAINER_PHONE,
               OTHER_TRAINER_PHONE,
               CLIENT_PHONE,
@@ -289,7 +289,7 @@ describe('Reports trainers (e2e)', () => {
         phone: {
           in: [
             ADMIN_PHONE,
-            RECEPTION_PHONE,
+            ADMINISTRATOR_PHONE,
             TRAINER_PHONE,
             OTHER_TRAINER_PHONE,
             CLIENT_PHONE,
@@ -344,9 +344,9 @@ describe('Reports trainers (e2e)', () => {
     expect(byTrainer.body[0].trainerId).toBe(otherTrainerId);
   });
 
-  it('RECEPTION: только тренеры своего зала', async () => {
+  it('ADMINISTRATOR: только тренеры своего зала', async () => {
     const response = await authedGet(
-      receptionToken,
+      administratorToken,
       '/reports/trainers?from=2026-10-01&to=2026-10-31',
     );
 
@@ -358,15 +358,15 @@ describe('Reports trainers (e2e)', () => {
     });
   });
 
-  it('RECEPTION: чужой зал и чужой тренер → 403', async () => {
+  it('ADMINISTRATOR: чужой зал и чужой тренер → 403', async () => {
     const foreignGym = await authedGet(
-      receptionToken,
+      administratorToken,
       `/reports/trainers?from=2026-10-01&to=2026-10-31&gym_id=${otherGymId}`,
     );
     expect(foreignGym.status).toBe(403);
 
     const foreignTrainer = await authedGet(
-      receptionToken,
+      administratorToken,
       `/reports/trainers?from=2026-10-01&to=2026-10-31&trainer_id=${otherTrainerId}`,
     );
     expect(foreignTrainer.status).toBe(403);

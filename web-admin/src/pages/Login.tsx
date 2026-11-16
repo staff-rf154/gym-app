@@ -33,9 +33,9 @@ export default function Login() {
 
       const me = await api.get<AuthUser>('/auth/me');
 
-      if (me.data.role !== 'ADMIN' && me.data.role !== 'RECEPTION') {
+      if (me.data.role !== 'ADMIN' && me.data.role !== 'ADMINISTRATOR') {
         logout();
-        message.error('Доступ только для администраторов и ресепшена');
+        message.error('Доступ только для администраторов');
         return;
       }
 

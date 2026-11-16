@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const API_PREFIX = '/api/v1';
 const ADMIN_PHONE = '+79990000901';
-const RECEPTION_PHONE = '+79990000902';
+const ADMINISTRATOR_PHONE = '+79990000902';
 const CLIENT_PHONE = '+79990000903';
 const CREATED_CLIENT_PHONE = '+79990000904';
 const TEST_PASSWORD = 'TestPass123!';
@@ -19,14 +19,14 @@ describe('Goals (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let adminId: string;
-  let receptionUserId: string;
+  let administratorUserId: string;
   let clientUserId: string;
   let clientId: string;
   let gymId: string;
   let goalId: string;
   let inactiveGoalId: string;
   let adminToken: string;
-  let receptionToken: string;
+  let administratorToken: string;
   let clientToken: string;
 
   const login = async (phone: string): Promise<string> => {
@@ -74,7 +74,7 @@ describe('Goals (e2e)', () => {
 
     const phones = [
       ADMIN_PHONE,
-      RECEPTION_PHONE,
+      ADMINISTRATOR_PHONE,
       CLIENT_PHONE,
       CREATED_CLIENT_PHONE,
     ];
@@ -85,7 +85,7 @@ describe('Goals (e2e)', () => {
     await prisma.client.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
-    await prisma.reception.deleteMany({
+    await prisma.administrator.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
     await prisma.gym.deleteMany({ where: { name: GYM_NAME } });
@@ -107,15 +107,15 @@ describe('Goals (e2e)', () => {
     });
     adminId = admin.id;
 
-    const receptionUser = await prisma.user.create({
+    const administratorUser = await prisma.user.create({
       data: {
-        phone: RECEPTION_PHONE,
+        phone: ADMINISTRATOR_PHONE,
         passwordHash,
-        role: Role.RECEPTION,
-        name: 'E2E Goals Reception',
+        role: Role.ADMINISTRATOR,
+        name: 'E2E Goals Administrator',
       },
     });
-    receptionUserId = receptionUser.id;
+    administratorUserId = administratorUser.id;
 
     gymId = (
       await prisma.gym.create({
@@ -123,8 +123,8 @@ describe('Goals (e2e)', () => {
       })
     ).id;
 
-    await prisma.reception.create({
-      data: { userId: receptionUser.id, gymId },
+    await prisma.administrator.create({
+      data: { userId: administratorUser.id, gymId },
     });
 
     const clientUser = await prisma.user.create({
@@ -143,14 +143,14 @@ describe('Goals (e2e)', () => {
     await prisma.clientGym.create({ data: { clientId, gymId } });
 
     adminToken = await login(ADMIN_PHONE);
-    receptionToken = await login(RECEPTION_PHONE);
+    administratorToken = await login(ADMINISTRATOR_PHONE);
     clientToken = await login(CLIENT_PHONE);
   });
 
   afterAll(async () => {
     const phones = [
       ADMIN_PHONE,
-      RECEPTION_PHONE,
+      ADMINISTRATOR_PHONE,
       CLIENT_PHONE,
       CREATED_CLIENT_PHONE,
     ];
@@ -161,7 +161,7 @@ describe('Goals (e2e)', () => {
     await prisma.client.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
-    await prisma.reception.deleteMany({
+    await prisma.administrator.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
     await prisma.gym.deleteMany({ where: { id: gymId } });
@@ -252,8 +252,8 @@ describe('Goals (e2e)', () => {
     expect(response.body.goalText).toBe(`${GOAL_PREFIX} Похудение`);
   });
 
-  it('RECEPTION создаёт клиента с goalId в своём зале', async () => {
-    const response = await authed(receptionToken).post('/reception/clients', {
+  it('ADMINISTRATOR создаёт клиента с goalId в своём зале', async () => {
+    const response = await authed(administratorToken).post('/administrator/clients', {
       phone: CREATED_CLIENT_PHONE,
       name: 'E2E Goals New Client',
       goalId,
@@ -289,8 +289,8 @@ describe('Goals (e2e)', () => {
     expect(response.status).toBe(403);
   });
 
-  it('RECEPTION имеет доступ к активным целям', async () => {
-    const response = await authed(receptionToken).get('/goals');
+  it('ADMINISTRATOR имеет доступ к активным целям', async () => {
+    const response = await authed(administratorToken).get('/goals');
     expect(response.status).toBe(200);
     expect(response.body.some((goal: { id: string }) => goal.id === goalId)).toBe(
       true,

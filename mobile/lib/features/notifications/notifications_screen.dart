@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 import '../../core/api/api_error.dart';
 import '../auth/auth_controller.dart';
 import '../chats/chats_screen.dart';
+import '../client/client_workout_models.dart';
 import '../client/client_workouts_providers.dart';
 import '../client/workout_view_screen.dart';
+import '../common/period_filter.dart';
 import '../workouts/workouts_providers.dart';
 import 'notification_models.dart';
 import 'notification_providers.dart';
@@ -32,6 +34,7 @@ class NotificationsScreen extends ConsumerStatefulWidget {
 
 class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   _NotificationFilter _filter = _NotificationFilter.all;
+  WorkoutPeriod _period = WorkoutPeriod.all;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +56,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           notifications: value.where(_matches).toList(),
           filter: _filter,
           onFilter: (value) => setState(() => _filter = value),
+          period: _period,
+          onPeriod: (value) => setState(() => _period = value),
           onRefresh: () async => ref.invalidate(notificationsProvider),
           onOpen: _handleTap,
         ),
@@ -66,6 +71,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   bool _matches(AppNotification notification) {
+    if (!matchesPeriod(notification.createdAt, _period)) {
+      return false;
+    }
     return switch (_filter) {
       _NotificationFilter.all => true,
       _NotificationFilter.workout => notification.type == 'WORKOUT',
@@ -151,6 +159,8 @@ class _NotificationsBody extends StatelessWidget {
     required this.notifications,
     required this.filter,
     required this.onFilter,
+    required this.period,
+    required this.onPeriod,
     required this.onRefresh,
     required this.onOpen,
   });
@@ -158,6 +168,8 @@ class _NotificationsBody extends StatelessWidget {
   final List<AppNotification> notifications;
   final _NotificationFilter filter;
   final ValueChanged<_NotificationFilter> onFilter;
+  final WorkoutPeriod period;
+  final ValueChanged<WorkoutPeriod> onPeriod;
   final Future<void> Function() onRefresh;
   final ValueChanged<AppNotification> onOpen;
 
@@ -165,6 +177,10 @@ class _NotificationsBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: PeriodFilter(value: period, onChanged: onPeriod),
+        ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),

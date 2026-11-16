@@ -8,10 +8,14 @@ class ReportsApi {
 
   final ApiClient _api;
 
-  Future<List<WeightDynamicsPoint>> fetchWeightDynamics(String clientId) async {
+  Future<List<WeightDynamicsPoint>> fetchWeightDynamics(
+    String clientId, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final response = await _api.dio.get<List<dynamic>>(
       '/reports/weight-dynamics',
-      queryParameters: _clientParams(clientId),
+      queryParameters: {..._clientParams(clientId), ..._rangeParams(from, to)},
     );
     final points =
         (response.data ?? [])
@@ -25,11 +29,13 @@ class ReportsApi {
   }
 
   Future<List<ExerciseSummaryItem>> fetchExercisesSummary(
-    String clientId,
-  ) async {
+    String clientId, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final response = await _api.dio.get<List<dynamic>>(
       '/reports/exercises-summary',
-      queryParameters: _clientParams(clientId),
+      queryParameters: {..._clientParams(clientId), ..._rangeParams(from, to)},
     );
     return (response.data ?? [])
         .map(
@@ -41,10 +47,16 @@ class ReportsApi {
   Future<ExerciseProgress> fetchExerciseProgress({
     required String clientId,
     required String exerciseId,
+    DateTime? from,
+    DateTime? to,
   }) async {
     final response = await _api.dio.get<Map<String, dynamic>>(
       '/reports/exercise-progress',
-      queryParameters: {..._clientParams(clientId), 'exercise_id': exerciseId},
+      queryParameters: {
+        ..._clientParams(clientId),
+        'exercise_id': exerciseId,
+        ..._rangeParams(from, to),
+      },
     );
     return ExerciseProgress.fromJson(response.data!);
   }
@@ -80,5 +92,12 @@ class ReportsApi {
       return const {};
     }
     return {'client_id': clientId};
+  }
+
+  static Map<String, dynamic> _rangeParams(DateTime? from, DateTime? to) {
+    return {
+      if (from != null) 'from': _dateOnly(from),
+      if (to != null) 'to': _dateOnly(to),
+    };
   }
 }

@@ -11,3 +11,8 @@ final chatApiProvider = Provider<ChatApi>(
 final chatsProvider = FutureProvider.autoDispose<List<ChatSummary>>(
   (ref) => ref.watch(chatApiProvider).fetchChats(),
 );
+
+final unreadChatsProvider = Provider<int>((ref) {
+  final chats = ref.watch(chatsProvider).asData?.value ?? const <ChatSummary>[];
+  return chats.fold(0, (sum, chat) => sum + chat.unreadCount);
+});

@@ -7,7 +7,7 @@ import {
   MinLength,
 } from 'class-validator';
 
-export class CreateReceptionDto {
+export class CreateAdministratorDto {
   @ApiProperty({ example: '+79990000030' })
   @IsString()
   @MaxLength(20)

@@ -237,7 +237,13 @@ export class ReportsService {
     const items = await this.prisma.workoutItem.findMany({
       where: {
         exerciseId: query.exercise_id,
-        workout: { clientId, ...(trainerId ? { trainerId } : {}) },
+        workout: {
+          clientId,
+          ...(trainerId ? { trainerId } : {}),
+          ...(query.from || query.to
+            ? { date: this.buildDateFilter(query.from, query.to) }
+            : {}),
+        },
       },
       include: {
         workout: { select: { date: true } },
@@ -286,7 +292,15 @@ export class ReportsService {
     const trainerId = await this.resolveTrainerId(userId, role);
 
     const items = await this.prisma.workoutItem.findMany({
-      where: { workout: { clientId, ...(trainerId ? { trainerId } : {}) } },
+      where: {
+        workout: {
+          clientId,
+          ...(trainerId ? { trainerId } : {}),
+          ...(query.from || query.to
+            ? { date: this.buildDateFilter(query.from, query.to) }
+            : {}),
+        },
+      },
       include: {
         exercise: { select: { id: true, name: true } },
         workout: { select: { date: true } },
@@ -315,6 +329,7 @@ export class ReportsService {
       existing.recordsCount += 1;
 
       if (weight !== null) {
+        existing.firstWeight = existing.firstWeight ?? weight;
         existing.lastWeight = weight;
       }
     }
@@ -778,16 +793,16 @@ export class ReportsService {
       };
     }
 
-    if (role === Role.RECEPTION) {
-      const reception = await this.prisma.reception.findUnique({
+    if (role === Role.ADMINISTRATOR) {
+      const administrator = await this.prisma.administrator.findUnique({
         where: { userId },
       });
 
-      if (!reception) {
-        throw new ForbiddenException('Reception profile not found');
+      if (!administrator) {
+        throw new ForbiddenException('Administrator profile not found');
       }
 
-      if (filters.gym_id && filters.gym_id !== reception.gymId) {
+      if (filters.gym_id && filters.gym_id !== administrator.gymId) {
         throw new ForbiddenException('Gym access denied');
       }
 
@@ -795,7 +810,7 @@ export class ReportsService {
         const link = await this.prisma.clientGym.findFirst({
           where: {
             clientId: filters.client_id,
-            gymId: reception.gymId,
+            gymId: administrator.gymId,
             isActive: true,
           },
         });
@@ -809,7 +824,7 @@ export class ReportsService {
         const link = await this.prisma.trainerGym.findFirst({
           where: {
             trainerId: filters.trainer_id,
-            gymId: reception.gymId,
+            gymId: administrator.gymId,
             isActive: true,
           },
         });
@@ -820,7 +835,7 @@ export class ReportsService {
       }
 
       return {
-        gymId: reception.gymId,
+        gymId: administrator.gymId,
         trainerId: filters.trainer_id,
         clientId: filters.client_id,
       };
@@ -917,19 +932,19 @@ export class ReportsService {
       throw new BadRequestException('client_id is required');
     }
 
-    if (role === Role.RECEPTION) {
-      const reception = await this.prisma.reception.findUnique({
+    if (role === Role.ADMINISTRATOR) {
+      const administrator = await this.prisma.administrator.findUnique({
         where: { userId },
       });
 
-      if (!reception) {
-        throw new ForbiddenException('Reception profile not found');
+      if (!administrator) {
+        throw new ForbiddenException('Administrator profile not found');
       }
 
       const link = await this.prisma.clientGym.findFirst({
         where: {
           clientId,
-          gymId: reception.gymId,
+          gymId: administrator.gymId,
           isActive: true,
         },
       });

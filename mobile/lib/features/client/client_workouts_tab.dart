@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error.dart';
 import '../../core/utils/format.dart';
-import '../../core/utils/timezone.dart';
-import '../auth/auth_controller.dart';
 import 'client_workout_models.dart';
 import 'client_workouts_providers.dart';
 import 'workout_view_screen.dart';
@@ -28,9 +26,7 @@ class _ClientWorkoutsTabState extends ConsumerState<ClientWorkoutsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final workouts = ref.watch(clientAllWorkoutsProvider);
-    final timezone = ref.watch(authControllerProvider).value?.timezone ?? 'UTC';
-    final now = nowInTimezone(timezone);
+    final workouts = ref.watch(clientPeriodWorkoutsProvider(_period));
 
     return Column(
       children: [
@@ -59,7 +55,7 @@ class _ClientWorkoutsTabState extends ConsumerState<ClientWorkoutsTab> {
               ),
               IconButton(
                 tooltip: 'Обновить',
-                onPressed: () => ref.invalidate(clientAllWorkoutsProvider),
+                onPressed: () => ref.invalidate(clientPeriodWorkoutsProvider(_period)),
                 icon: const Icon(Icons.refresh),
               ),
             ],
@@ -102,7 +98,7 @@ class _ClientWorkoutsTabState extends ConsumerState<ClientWorkoutsTab> {
                     const SizedBox(height: 12),
                     FilledButton(
                       onPressed: () =>
-                          ref.invalidate(clientAllWorkoutsProvider),
+                          ref.invalidate(clientPeriodWorkoutsProvider(_period)),
                       child: const Text('Повторить'),
                     ),
                   ],
@@ -114,12 +110,7 @@ class _ClientWorkoutsTabState extends ConsumerState<ClientWorkoutsTab> {
                   items
                       .where(
                         (workout) =>
-                            (_status == null || workout.status == _status) &&
-                            matchesWorkoutPeriod(
-                              workout.date,
-                              _period,
-                              now: now,
-                            ),
+                            _status == null || workout.status == _status,
                       )
                       .toList()
                     ..sort((a, b) {
@@ -132,7 +123,7 @@ class _ClientWorkoutsTabState extends ConsumerState<ClientWorkoutsTab> {
 
               return RefreshIndicator(
                 onRefresh: () async =>
-                    ref.invalidate(clientAllWorkoutsProvider),
+                    ref.invalidate(clientPeriodWorkoutsProvider(_period)),
                 child: filtered.isEmpty
                     ? ListView(
                         children: const [

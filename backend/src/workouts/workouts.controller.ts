@@ -21,10 +21,12 @@ import { CreateAdminWorkoutTemplateDto } from './dto/create-admin-workout-templa
 import { CreateWorkoutTemplateDto } from './dto/create-workout-template.dto';
 import { CreateWorkoutDto } from './dto/create-workout.dto';
 import { TrainerWorkoutsQueryDto } from './dto/trainer-workouts-query.dto';
+import { WorkoutCalendarQueryDto } from './dto/workout-calendar-query.dto';
 import { UpdateAdminWorkoutTemplateDto } from './dto/update-admin-workout-template.dto';
 import { UpdateWorkoutItemResultDto } from './dto/update-workout-item-result.dto';
 import { UpdateWorkoutTemplateDto } from './dto/update-workout-template.dto';
 import {
+  WorkoutCalendarItem,
   WorkoutResponse,
   WorkoutTemplateResponse,
   WorkoutsService,
@@ -70,11 +72,11 @@ export class AdminTemplatesController {
   }
 }
 
-@ApiTags('reception')
+@ApiTags('administrator')
 @ApiBearerAuth()
-@Roles(Role.RECEPTION)
-@Controller('reception/templates')
-export class ReceptionTemplatesController {
+@Roles(Role.ADMINISTRATOR)
+@Controller('administrator/templates')
+export class AdministratorTemplatesController {
   constructor(private readonly workoutsService: WorkoutsService) {}
 
   @Get()
@@ -82,7 +84,7 @@ export class ReceptionTemplatesController {
   findAll(
     @CurrentUser('userId') userId: string,
   ): Promise<WorkoutTemplateResponse[]> {
-    return this.workoutsService.findReceptionTemplates(userId);
+    return this.workoutsService.findAdministratorTemplates(userId);
   }
 
   @Post()
@@ -91,7 +93,7 @@ export class ReceptionTemplatesController {
     @CurrentUser('userId') userId: string,
     @Body() dto: CreateWorkoutTemplateDto,
   ): Promise<WorkoutTemplateResponse> {
-    return this.workoutsService.createReceptionTemplate(userId, dto);
+    return this.workoutsService.createAdministratorTemplate(userId, dto);
   }
 
   @Put(':id')
@@ -101,7 +103,7 @@ export class ReceptionTemplatesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateWorkoutTemplateDto,
   ): Promise<WorkoutTemplateResponse> {
-    return this.workoutsService.updateReceptionTemplate(userId, id, dto);
+    return this.workoutsService.updateAdministratorTemplate(userId, id, dto);
   }
 
   @Delete(':id')
@@ -111,7 +113,7 @@ export class ReceptionTemplatesController {
     @CurrentUser('userId') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
-    await this.workoutsService.removeReceptionTemplate(userId, id);
+    await this.workoutsService.removeAdministratorTemplate(userId, id);
   }
 }
 
@@ -186,6 +188,15 @@ export class TrainerWorkoutsController {
     return this.workoutsService.trainerWorkouts(userId, query);
   }
 
+  @Get('calendar')
+  @ApiOperation({ summary: 'Календарь тренировок клиентов тренера' })
+  calendar(
+    @CurrentUser('userId') userId: string,
+    @Query() query: WorkoutCalendarQueryDto,
+  ): Promise<WorkoutCalendarItem[]> {
+    return this.workoutsService.trainerWorkoutCalendar(userId, query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Тренировка клиента тренера' })
   findOne(
@@ -249,6 +260,15 @@ export class ClientWorkoutsController {
     @Query() query: ClientWorkoutsQueryDto,
   ): Promise<PaginatedResponse<WorkoutResponse>> {
     return this.workoutsService.clientWorkouts(userId, query);
+  }
+
+  @Get('calendar')
+  @ApiOperation({ summary: 'Календарь тренировок клиента' })
+  calendar(
+    @CurrentUser('userId') userId: string,
+    @Query() query: WorkoutCalendarQueryDto,
+  ): Promise<WorkoutCalendarItem[]> {
+    return this.workoutsService.clientWorkoutCalendar(userId, query);
   }
 
   @Get(':id')

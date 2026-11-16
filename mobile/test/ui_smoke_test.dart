@@ -84,6 +84,12 @@ class _FakeClientWorkoutsApi extends ClientWorkoutsApi {
   }) async => workouts;
 
   @override
+  Future<List<ClientWorkout>> fetchCalendar({
+    required DateTime from,
+    required DateTime to,
+  }) async => workouts;
+
+  @override
   Future<ClientWorkout> fetchWorkout(String id) async =>
       workoutById.firstWhere((workout) => workout.id == id);
 
@@ -122,18 +128,24 @@ class _FakeReportsApi extends ReportsApi {
 
   @override
   Future<List<WeightDynamicsPoint>> fetchWeightDynamics(
-    String clientId,
-  ) async => weightPoints;
+    String clientId, {
+    DateTime? from,
+    DateTime? to,
+  }) async => weightPoints;
 
   @override
   Future<List<ExerciseSummaryItem>> fetchExercisesSummary(
-    String clientId,
-  ) async => summary;
+    String clientId, {
+    DateTime? from,
+    DateTime? to,
+  }) async => summary;
 
   @override
   Future<ExerciseProgress> fetchExerciseProgress({
     required String clientId,
     required String exerciseId,
+    DateTime? from,
+    DateTime? to,
   }) async => progress!;
 }
 

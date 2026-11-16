@@ -5,17 +5,28 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
 import '../../core/widgets/empty_state.dart';
+import '../client/client_workout_models.dart';
 import '../clients/clients_providers.dart';
 import '../clients/trainer_client.dart';
+import '../common/period_filter.dart';
 import 'weight_measurement.dart';
 import 'weights_providers.dart';
 
-class WeightTab extends ConsumerWidget {
+class WeightTab extends ConsumerStatefulWidget {
   const WeightTab({super.key, required this.client});
 
   final TrainerClient client;
 
-  Future<void> _addMeasurement(BuildContext context, WidgetRef ref) async {
+  @override
+  ConsumerState<WeightTab> createState() => _WeightTabState();
+}
+
+class _WeightTabState extends ConsumerState<WeightTab> {
+  WorkoutPeriod _period = WorkoutPeriod.all;
+
+  TrainerClient get client => widget.client;
+
+  Future<void> _addMeasurement() async {
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _AddMeasurementDialog(clientId: client.id),
@@ -27,18 +38,22 @@ class WeightTab extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final measurements = ref.watch(weightMeasurementsProvider(client.id));
 
     return switch (measurements) {
       AsyncData(:final value) => _WeightContent(
         client: client,
-        measurements: value,
+        measurements: value
+            .where((item) => matchesPeriod(item.measuredAt, _period))
+            .toList(),
+        period: _period,
+        onPeriod: (period) => setState(() => _period = period),
         onRefresh: () async {
           ref.invalidate(weightMeasurementsProvider(client.id));
           ref.invalidate(myClientsProvider);
         },
-        onAdd: () => _addMeasurement(context, ref),
+        onAdd: _addMeasurement,
       ),
       AsyncError(:final error) => Center(
         child: Padding(
@@ -68,12 +83,16 @@ class _WeightContent extends StatelessWidget {
   const _WeightContent({
     required this.client,
     required this.measurements,
+    required this.period,
+    required this.onPeriod,
     required this.onRefresh,
     required this.onAdd,
   });
 
   final TrainerClient client;
   final List<WeightMeasurement> measurements;
+  final WorkoutPeriod period;
+  final ValueChanged<WorkoutPeriod> onPeriod;
   final Future<void> Function() onRefresh;
   final VoidCallback onAdd;
 
@@ -94,6 +113,8 @@ class _WeightContent extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              PeriodFilter(value: period, onChanged: onPeriod),
+              const SizedBox(height: 12),
               Card(
                 margin: EdgeInsets.zero,
                 child: Padding(

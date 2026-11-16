@@ -25,6 +25,7 @@ import {
 } from '../common/timezone';
 import { ClientWorkoutsQueryDto } from './dto/client-workouts-query.dto';
 import { TrainerWorkoutsQueryDto } from './dto/trainer-workouts-query.dto';
+import { WorkoutCalendarQueryDto } from './dto/workout-calendar-query.dto';
 import { CreateAdminWorkoutTemplateDto } from './dto/create-admin-workout-template.dto';
 import { CreateWorkoutTemplateDto } from './dto/create-workout-template.dto';
 import { CreateWorkoutDto } from './dto/create-workout.dto';
@@ -47,6 +48,16 @@ const workoutInclude = {
     orderBy: { order: 'asc' },
   },
 } satisfies Prisma.WorkoutInclude;
+
+const workoutCalendarSelect = {
+  id: true,
+  clientId: true,
+  trainerId: true,
+  gymId: true,
+  date: true,
+  startTime: true,
+  status: true,
+} satisfies Prisma.WorkoutSelect;
 
 const templateInclude = {
   items: { orderBy: { order: 'asc' } },
@@ -87,6 +98,16 @@ export interface WorkoutResponse {
   comment: string | null;
   templateId: string | null;
   items: WorkoutItemResponse[];
+}
+
+export interface WorkoutCalendarItem {
+  id: string;
+  clientId: string;
+  trainerId: string;
+  gymId: string;
+  date: string;
+  startTime: string | null;
+  status: WorkoutStatus;
 }
 
 export type WorkoutTemplateScope = 'GLOBAL' | 'GYM' | 'PERSONAL';
@@ -490,14 +511,14 @@ export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async findReceptionTemplates(
+  async findAdministratorTemplates(
     userId: string,
   ): Promise<WorkoutTemplateResponse[]> {
-    const reception = await this.getReception(userId);
+    const administrator = await this.getAdministrator(userId);
     const templates = await this.prisma.workoutTemplate.findMany({
       where: {
         trainerId: null,
-        gymId: reception.gymId,
+        gymId: administrator.gymId,
         isActive: true,
       },
       include: templateInclude,
@@ -507,16 +528,16 @@ export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
     return templates.map((template) => this.toTemplateResponse(template));
   }
 
-  async createReceptionTemplate(
+  async createAdministratorTemplate(
     userId: string,
     dto: CreateWorkoutTemplateDto,
   ): Promise<WorkoutTemplateResponse> {
-    const reception = await this.getReception(userId);
-    await this.assertItems(dto.items, reception.gymId);
+    const administrator = await this.getAdministrator(userId);
+    await this.assertItems(dto.items, administrator.gymId);
 
     const template = await this.prisma.workoutTemplate.create({
       data: {
-        gymId: reception.gymId,
+        gymId: administrator.gymId,
         createdById: userId,
         name: dto.name,
         description: dto.description,
@@ -528,16 +549,16 @@ export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
     return this.toTemplateResponse(template);
   }
 
-  async updateReceptionTemplate(
+  async updateAdministratorTemplate(
     userId: string,
     id: string,
     dto: UpdateWorkoutTemplateDto,
   ): Promise<WorkoutTemplateResponse> {
-    const reception = await this.getReception(userId);
-    await this.findReceptionTemplateEntity(reception.gymId, id);
+    const administrator = await this.getAdministrator(userId);
+    await this.findAdministratorTemplateEntity(administrator.gymId, id);
 
     if (dto.items) {
-      await this.assertItems(dto.items, reception.gymId);
+      await this.assertItems(dto.items, administrator.gymId);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -557,9 +578,9 @@ export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
     return this.findOneTemplateResponse(id);
   }
 
-  async removeReceptionTemplate(userId: string, id: string): Promise<void> {
-    const reception = await this.getReception(userId);
-    await this.findReceptionTemplateEntity(reception.gymId, id);
+  async removeAdministratorTemplate(userId: string, id: string): Promise<void> {
+    const administrator = await this.getAdministrator(userId);
+    await this.findAdministratorTemplateEntity(administrator.gymId, id);
 
     await this.prisma.workoutTemplate.update({
       where: { id },
@@ -671,6 +692,37 @@ export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
     return this.findOneWorkoutResponse(id);
   }
 
+  async trainerWorkoutCalendar(
+    userId: string,
+    query: WorkoutCalendarQueryDto,
+  ): Promise<WorkoutCalendarItem[]> {
+    const trainer = await this.getTrainer(userId);
+    const from = parseDate(query.from);
+    const to = parseDate(query.to);
+
+    if (from.getTime() > to.getTime()) {
+      throw new BadRequestException('from must be less than or equal to to');
+    }
+
+    const where: Prisma.WorkoutWhereInput = {
+      trainerId: trainer.id,
+      date: { gte: from, lte: to },
+      ...(query.client_id ? { clientId: query.client_id } : {}),
+      ...(query.gym_id ? { gymId: query.gym_id } : {}),
+    };
+
+    const workouts = await this.prisma.workout.findMany({
+      where,
+      select: workoutCalendarSelect,
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+    });
+
+    return workouts.map((workout) => ({
+      ...workout,
+      date: workout.date.toISOString().slice(0, 10),
+    }));
+  }
+
   async trainerWorkouts(
     userId: string,
     query: TrainerWorkoutsQueryDto,
@@ -722,6 +774,34 @@ export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
     }
 
     return this.toWorkoutResponse(workout);
+  }
+
+  async clientWorkoutCalendar(
+    userId: string,
+    query: WorkoutCalendarQueryDto,
+  ): Promise<WorkoutCalendarItem[]> {
+    const client = await this.getClient(userId);
+    const from = parseDate(query.from);
+    const to = parseDate(query.to);
+
+    if (from.getTime() > to.getTime()) {
+      throw new BadRequestException('from must be less than or equal to to');
+    }
+
+    const workouts = await this.prisma.workout.findMany({
+      where: {
+        clientId: client.id,
+        date: { gte: from, lte: to },
+        ...(query.gym_id ? { gymId: query.gym_id } : {}),
+      },
+      select: workoutCalendarSelect,
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+    });
+
+    return workouts.map((workout) => ({
+      ...workout,
+      date: workout.date.toISOString().slice(0, 10),
+    }));
   }
 
   async clientWorkouts(
@@ -1108,17 +1188,17 @@ export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
     return client;
   }
 
-  private async getReception(userId: string) {
-    const reception = await this.prisma.reception.findUnique({
+  private async getAdministrator(userId: string) {
+    const administrator = await this.prisma.administrator.findUnique({
       where: { userId },
       select: { gymId: true },
     });
 
-    if (!reception) {
-      throw new ForbiddenException('Reception profile not found');
+    if (!administrator) {
+      throw new ForbiddenException('Administrator profile not found');
     }
 
-    return reception;
+    return administrator;
   }
 
   private async activeGymIds(trainerId: string): Promise<string[]> {
@@ -1167,7 +1247,7 @@ export class WorkoutsService implements OnModuleInit, OnModuleDestroy {
     return this.findTemplateOrThrow({ id, trainerId: null, isActive: true });
   }
 
-  private async findReceptionTemplateEntity(gymId: string, id: string) {
+  private async findAdministratorTemplateEntity(gymId: string, id: string) {
     return this.findTemplateOrThrow({
       id,
       gymId,

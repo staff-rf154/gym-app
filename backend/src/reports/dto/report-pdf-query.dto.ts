@@ -8,12 +8,12 @@ export class ReportPdfQueryDto {
   client_id?: string;
 
   @ApiPropertyOptional({
-    enum: ['week', 'month', '3months', 'year', 'custom'],
+    enum: ['week', 'previousWeek', 'month', '3months', 'year', 'custom'],
     default: 'week',
   })
   @IsOptional()
-  @IsIn(['week', 'month', '3months', 'year', 'custom'])
-  period?: 'week' | 'month' | '3months' | 'year' | 'custom';
+  @IsIn(['week', 'previousWeek', 'month', '3months', 'year', 'custom'])
+  period?: 'week' | 'previousWeek' | 'month' | '3months' | 'year' | 'custom';
 
   @ApiPropertyOptional({ format: 'date' })
   @IsOptional()
@@ -24,4 +24,14 @@ export class ReportPdfQueryDto {
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   to?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  gym_id?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  trainer_id?: string;
 }

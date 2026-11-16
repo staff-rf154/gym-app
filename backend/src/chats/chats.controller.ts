@@ -15,13 +15,17 @@ import {
 } from '../common/dto/pagination-query.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { ChatResponse, ChatsService } from './chats.service';
+import {
+  ChatResponse,
+  ChatStaffContact,
+  ChatsService,
+} from './chats.service';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { MessagesQueryDto, SendMessageDto } from './dto/message.dto';
 
 @ApiTags('shared')
 @ApiBearerAuth()
-@Roles(Role.CLIENT, Role.TRAINER, Role.ADMIN)
+@Roles(Role.CLIENT, Role.TRAINER, Role.ADMIN, Role.ADMINISTRATOR)
 @Controller('chats')
 export class ChatsController {
   constructor(private readonly chatsService: ChatsService) {}
@@ -34,6 +38,15 @@ export class ChatsController {
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponse<ChatResponse>> {
     return this.chatsService.findChats(userId, role, query);
+  }
+
+  @Get('staff')
+  @ApiOperation({ summary: 'Доступные администраторы для чата' })
+  findStaff(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: Role,
+  ): Promise<ChatStaffContact[]> {
+    return this.chatsService.findStaff(userId, role);
   }
 
   @Post()

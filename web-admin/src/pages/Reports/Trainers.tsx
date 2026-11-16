@@ -8,11 +8,12 @@ import {
   Space,
   Table,
   Typography,
+  message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
-import api from '../../api/client';
+import api, { downloadReportPdf } from '../../api/client';
 import { currentWeekRange } from '../../utils/format';
 import { useReportLookups } from './useReportLookups';
 
@@ -40,6 +41,7 @@ export default function TrainersReportPage() {
   const [range, setRange] = useState<[Dayjs, Dayjs]>(currentWeekRange());
   const [gymId, setGymId] = useState<string | undefined>();
   const [trainerId, setTrainerId] = useState<string | undefined>();
+  const [exporting, setExporting] = useState(false);
 
   const params = useMemo(
     () => ({
@@ -61,6 +63,29 @@ export default function TrainersReportPage() {
       return response.data;
     },
   });
+
+  const handleExportPdf = async () => {
+    setExporting(true);
+
+    try {
+      await downloadReportPdf(
+        '/reports/pdf/trainers',
+        {
+          period: 'custom',
+          from: params.from,
+          to: params.to,
+          gym_id: gymId,
+          trainer_id: trainerId,
+        },
+        'trainers-report.pdf',
+      );
+      message.success('PDF сформирован');
+    } catch {
+      message.error('Не удалось сформировать PDF');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const columns: ColumnsType<TrainerReportItem> = [
     { title: 'Тренер', dataIndex: 'trainerName', key: 'trainerName' },
@@ -110,6 +135,9 @@ export default function TrainersReportPage() {
             }))}
           />
         )}
+        <Button loading={exporting} onClick={() => void handleExportPdf()}>
+          Экспорт PDF
+        </Button>
       </Space>
 
       {isError && (

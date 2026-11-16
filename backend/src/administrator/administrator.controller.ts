@@ -30,25 +30,25 @@ import {
   CreateTrainerResponse,
   TrainerResponse,
 } from '../trainers/trainers.service';
-import { LinkReceptionTrainerDto } from './dto/link-reception-trainer.dto';
+import { LinkAdministratorTrainerDto } from './dto/link-administrator-trainer.dto';
 import { UpdatePhotoDto } from './dto/update-photo.dto';
 import {
-  ReceptionClientTrainerResponse,
-  ReceptionGymResponse,
-  ReceptionService,
-} from './reception.service';
+  AdministratorClientTrainerResponse,
+  AdministratorGymResponse,
+  AdministratorService,
+} from './administrator.service';
 
-@ApiTags('reception')
+@ApiTags('administrator')
 @ApiBearerAuth()
-@Roles(Role.RECEPTION)
-@Controller('reception')
-export class ReceptionController {
-  constructor(private readonly receptionService: ReceptionService) {}
+@Roles(Role.ADMINISTRATOR)
+@Controller('administrator')
+export class AdministratorController {
+  constructor(private readonly administratorService: AdministratorService) {}
 
   @Get('gyms')
   @ApiOperation({ summary: 'Мой зал' })
-  getGym(@CurrentUser('userId') userId: string): Promise<ReceptionGymResponse> {
-    return this.receptionService.getGym(userId);
+  getGym(@CurrentUser('userId') userId: string): Promise<AdministratorGymResponse> {
+    return this.administratorService.getGym(userId);
   }
 
   @Get('clients')
@@ -57,7 +57,7 @@ export class ReceptionController {
     @CurrentUser('userId') userId: string,
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponse<ClientResponse>> {
-    return this.receptionService.findClients(userId, query);
+    return this.administratorService.findClients(userId, query);
   }
 
   @Get('clients/:id')
@@ -66,7 +66,7 @@ export class ReceptionController {
     @CurrentUser('userId') userId: string,
     @Param('id', ParseUUIDPipe) clientId: string,
   ): Promise<ClientResponse> {
-    return this.receptionService.findClient(userId, clientId);
+    return this.administratorService.findClient(userId, clientId);
   }
 
   @Get('clients/:id/weight-measurements')
@@ -75,7 +75,7 @@ export class ReceptionController {
     @CurrentUser('userId') userId: string,
     @Param('id', ParseUUIDPipe) clientId: string,
   ): Promise<WeightMeasurement[]> {
-    return this.receptionService.findWeightMeasurements(userId, clientId);
+    return this.administratorService.findWeightMeasurements(userId, clientId);
   }
 
   @Post('clients/:id/weight-measurements')
@@ -85,7 +85,7 @@ export class ReceptionController {
     @Param('id', ParseUUIDPipe) clientId: string,
     @Body() dto: CreateWeightMeasurementDto,
   ): Promise<WeightMeasurement> {
-    return this.receptionService.createWeightMeasurement(
+    return this.administratorService.createWeightMeasurement(
       userId,
       clientId,
       dto,
@@ -100,7 +100,7 @@ export class ReceptionController {
     @Param('id', ParseUUIDPipe) clientId: string,
     @Body() dto: ResetPasswordDto,
   ): Promise<{ new_password: string }> {
-    return this.receptionService.resetClientPassword(
+    return this.administratorService.resetClientPassword(
       userId,
       clientId,
       dto.password,
@@ -113,7 +113,7 @@ export class ReceptionController {
     @CurrentUser('userId') userId: string,
     @Body() dto: CreateClientDto,
   ): Promise<CreateClientResponse> {
-    return this.receptionService.createClient(userId, dto);
+    return this.administratorService.createClient(userId, dto);
   }
 
   @Put('clients/:id')
@@ -123,7 +123,7 @@ export class ReceptionController {
     @Param('id', ParseUUIDPipe) clientId: string,
     @Body() dto: UpdateClientDto,
   ): Promise<ClientResponse> {
-    return this.receptionService.updateClient(userId, clientId, dto);
+    return this.administratorService.updateClient(userId, clientId, dto);
   }
 
   @Post('clients/:id/photo')
@@ -133,7 +133,7 @@ export class ReceptionController {
     @Param('id', ParseUUIDPipe) clientId: string,
     @Body() dto: UpdatePhotoDto,
   ): Promise<ClientResponse> {
-    return this.receptionService.setClientPhoto(
+    return this.administratorService.setClientPhoto(
       userId,
       clientId,
       dto.photoUrl,
@@ -145,8 +145,8 @@ export class ReceptionController {
   findClientTrainers(
     @CurrentUser('userId') userId: string,
     @Param('id', ParseUUIDPipe) clientId: string,
-  ): Promise<ReceptionClientTrainerResponse[]> {
-    return this.receptionService.findClientTrainers(userId, clientId);
+  ): Promise<AdministratorClientTrainerResponse[]> {
+    return this.administratorService.findClientTrainers(userId, clientId);
   }
 
   @Post('clients/:id/trainers')
@@ -154,9 +154,9 @@ export class ReceptionController {
   linkTrainer(
     @CurrentUser('userId') userId: string,
     @Param('id', ParseUUIDPipe) clientId: string,
-    @Body() dto: LinkReceptionTrainerDto,
-  ): Promise<ReceptionClientTrainerResponse> {
-    return this.receptionService.linkTrainer(
+    @Body() dto: LinkAdministratorTrainerDto,
+  ): Promise<AdministratorClientTrainerResponse> {
+    return this.administratorService.linkTrainer(
       userId,
       clientId,
       dto.trainer_id,
@@ -171,7 +171,7 @@ export class ReceptionController {
     @Param('id', ParseUUIDPipe) clientId: string,
     @Param('linkId', ParseUUIDPipe) linkId: string,
   ): Promise<void> {
-    await this.receptionService.unlinkTrainer(userId, clientId, linkId);
+    await this.administratorService.unlinkTrainer(userId, clientId, linkId);
   }
 
   @Get('trainers')
@@ -180,7 +180,7 @@ export class ReceptionController {
     @CurrentUser('userId') userId: string,
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponse<TrainerResponse>> {
-    return this.receptionService.findTrainers(userId, query);
+    return this.administratorService.findTrainers(userId, query);
   }
 
   @Post('trainers/:id/reset-password')
@@ -191,7 +191,7 @@ export class ReceptionController {
     @Param('id', ParseUUIDPipe) trainerId: string,
     @Body() dto: ResetPasswordDto,
   ): Promise<{ new_password: string }> {
-    return this.receptionService.resetTrainerPassword(
+    return this.administratorService.resetTrainerPassword(
       userId,
       trainerId,
       dto.password,
@@ -204,7 +204,7 @@ export class ReceptionController {
     @CurrentUser('userId') userId: string,
     @Body() dto: CreateTrainerDto,
   ): Promise<CreateTrainerResponse> {
-    return this.receptionService.createTrainer(userId, dto);
+    return this.administratorService.createTrainer(userId, dto);
   }
 
   @Put('trainers/:id')
@@ -214,7 +214,7 @@ export class ReceptionController {
     @Param('id', ParseUUIDPipe) trainerId: string,
     @Body() dto: UpdateTrainerDto,
   ): Promise<TrainerResponse> {
-    return this.receptionService.updateTrainer(userId, trainerId, dto);
+    return this.administratorService.updateTrainer(userId, trainerId, dto);
   }
 
   @Post('trainers/:id/photo')
@@ -224,7 +224,7 @@ export class ReceptionController {
     @Param('id', ParseUUIDPipe) trainerId: string,
     @Body() dto: UpdatePhotoDto,
   ): Promise<TrainerResponse> {
-    return this.receptionService.setTrainerPhoto(
+    return this.administratorService.setTrainerPhoto(
       userId,
       trainerId,
       dto.photoUrl,

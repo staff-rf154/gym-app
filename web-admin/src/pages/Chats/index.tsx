@@ -68,6 +68,8 @@ export default function ChatsPage() {
   const [createForm] = Form.useForm<CreateChatFormValues>();
   const queryClient = useQueryClient();
   const currentUserId = useAuthStore((state) => state.user?.user_id);
+  const currentRole = useAuthStore((state) => state.user?.role);
+  const isAdmin = currentRole === 'ADMIN';
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createType, setCreateType] =
@@ -75,6 +77,7 @@ export default function ChatsPage() {
 
   const { data: clients = [] } = useQuery({
     queryKey: ['chat-clients'],
+    enabled: isAdmin,
     queryFn: async () => {
       const { data } = await api.get<PaginatedResponse<PeerOption>>(
         '/admin/clients',
@@ -86,6 +89,7 @@ export default function ChatsPage() {
 
   const { data: trainers = [] } = useQuery({
     queryKey: ['chat-trainers'],
+    enabled: isAdmin,
     queryFn: async () => {
       const { data } = await api.get<PaginatedResponse<PeerOption>>(
         '/admin/trainers',
@@ -230,9 +234,11 @@ export default function ChatsPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           Чаты
         </Typography.Title>
-        <Button type="primary" onClick={() => setCreateOpen(true)}>
-          Новый чат
-        </Button>
+        {isAdmin && (
+          <Button type="primary" onClick={() => setCreateOpen(true)}>
+            Новый чат
+          </Button>
+        )}
       </Space>
 
       {isError && (
@@ -250,9 +256,11 @@ export default function ChatsPage() {
 
       {!isLoading && !isError && chats.length === 0 ? (
         <Empty description="Чатов пока нет">
-          <Button type="primary" onClick={() => setCreateOpen(true)}>
-            Начать чат
-          </Button>
+          {isAdmin && (
+            <Button type="primary" onClick={() => setCreateOpen(true)}>
+              Начать чат
+            </Button>
+          )}
         </Empty>
       ) : (
         <Table<Chat>

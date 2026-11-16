@@ -57,7 +57,7 @@ export class AdminGoalsController {
 
 @ApiTags('shared')
 @ApiBearerAuth()
-@Roles(Role.CLIENT, Role.RECEPTION, Role.TRAINER, Role.ADMIN)
+@Roles(Role.CLIENT, Role.ADMINISTRATOR, Role.TRAINER, Role.ADMIN)
 @Controller('goals')
 export class GoalsController {
   constructor(private readonly goalsService: GoalsService) {}

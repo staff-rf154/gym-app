@@ -11,15 +11,15 @@ export interface ReportOption {
 export function useReportLookups() {
   const role = useAuthStore((state) => state.user?.role);
   const isAdmin = role === 'ADMIN';
-  const isReception = role === 'RECEPTION';
+  const isAdministrator = role === 'ADMINISTRATOR';
   const isTrainer = role === 'TRAINER';
 
   const gymsQuery = useQuery({
     queryKey: ['report-gyms', role],
-    enabled: isAdmin || isReception,
+    enabled: isAdmin || isAdministrator,
     queryFn: async () => {
-      if (isReception) {
-        const { data } = await api.get<ReportOption>('/reception/gyms');
+      if (isAdministrator) {
+        const { data } = await api.get<ReportOption>('/administrator/gyms');
         return [data];
       }
 
@@ -30,10 +30,10 @@ export function useReportLookups() {
 
   const trainersQuery = useQuery({
     queryKey: ['report-trainers', role],
-    enabled: isAdmin || isReception,
+    enabled: isAdmin || isAdministrator,
     queryFn: async () => {
       const { data } = await api.get<PaginatedResponse<ReportOption>>(
-        isAdmin ? '/admin/trainers' : '/reception/trainers',
+        isAdmin ? '/admin/trainers' : '/administrator/trainers',
         { params: { limit: 100 } },
       );
       return data.items.map((trainer) => ({ id: trainer.id, name: trainer.name }));
@@ -42,12 +42,12 @@ export function useReportLookups() {
 
   const clientsQuery = useQuery({
     queryKey: ['report-clients', role],
-    enabled: isAdmin || isReception || isTrainer,
+    enabled: isAdmin || isAdministrator || isTrainer,
     queryFn: async () => {
       const path = isAdmin
         ? '/admin/clients'
-        : isReception
-          ? '/reception/clients'
+        : isAdministrator
+          ? '/administrator/clients'
           : '/trainer/clients';
       if (isTrainer) {
         const { data } = await api.get<ReportOption[]>(path);
@@ -63,7 +63,7 @@ export function useReportLookups() {
   return {
     role,
     isAdmin,
-    isReception,
+    isAdministrator,
     isTrainer,
     gyms: gymsQuery.data ?? [],
     trainers: trainersQuery.data ?? [],

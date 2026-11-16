@@ -51,7 +51,7 @@ interface DemoStatus {
   gyms: number;
   trainers: number;
   clients: number;
-  receptions: number;
+  administrators: number;
   workouts: number;
 }
 
@@ -470,7 +470,7 @@ export default function SettingsPage() {
             {demoLoaded && demoStatus ? (
               <Typography.Text type="secondary">
                 Залы: {demoStatus.gyms}, тренеры: {demoStatus.trainers}, клиенты:{' '}
-                {demoStatus.clients}, ресепшены: {demoStatus.receptions},
+                {demoStatus.clients}, администраторы: {demoStatus.administrators},
                 тренировки: {demoStatus.workouts}
               </Typography.Text>
             ) : null}
@@ -515,7 +515,7 @@ export default function SettingsPage() {
 
           <Typography.Text type="secondary">
             Демо-аккаунты: тренеры +79995550001–+79995550006, клиенты
-            +79995550101–+79995550120, ресепшены +79995550201–+79995550203.
+            +79995550101–+79995550120, администраторы +79995550201–+79995550203.
             Пароль — значение переменной DEFAULT_CLIENT_PASSWORD.
           </Typography.Text>
         </Space>

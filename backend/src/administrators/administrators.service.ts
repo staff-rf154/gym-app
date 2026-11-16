@@ -7,21 +7,21 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateReceptionDto } from './dto/create-reception.dto';
-import { UpdateReceptionDto } from './dto/update-reception.dto';
+import { CreateAdministratorDto } from './dto/create-administrator.dto';
+import { UpdateAdministratorDto } from './dto/update-administrator.dto';
 
 const BCRYPT_ROUNDS = 12;
 
-const receptionInclude = {
+const administratorInclude = {
   user: { select: { phone: true, name: true } },
   gym: true,
-} satisfies Prisma.ReceptionInclude;
+} satisfies Prisma.AdministratorInclude;
 
-type ReceptionEntity = Prisma.ReceptionGetPayload<{
-  include: typeof receptionInclude;
+type AdministratorEntity = Prisma.AdministratorGetPayload<{
+  include: typeof administratorInclude;
 }>;
 
-export interface ReceptionResponse {
+export interface AdministratorResponse {
   id: string;
   userId: string;
   phone: string;
@@ -31,31 +31,31 @@ export interface ReceptionResponse {
   createdAt: Date;
 }
 
-export interface CreateReceptionResponse extends ReceptionResponse {
+export interface CreateAdministratorResponse extends AdministratorResponse {
   initial_password: string;
 }
 
 @Injectable()
-export class ReceptionsService {
+export class AdministratorsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {}
 
-  async findAll(): Promise<ReceptionResponse[]> {
-    const receptions = await this.prisma.reception.findMany({
-      include: receptionInclude,
+  async findAll(): Promise<AdministratorResponse[]> {
+    const administrators = await this.prisma.administrator.findMany({
+      include: administratorInclude,
       orderBy: { createdAt: 'asc' },
     });
 
-    return receptions.map((reception) => this.toResponse(reception));
+    return administrators.map((administrator) => this.toResponse(administrator));
   }
 
-  async findOne(id: string): Promise<ReceptionResponse> {
+  async findOne(id: string): Promise<AdministratorResponse> {
     return this.toResponse(await this.findEntity(id));
   }
 
-  async create(dto: CreateReceptionDto): Promise<CreateReceptionResponse> {
+  async create(dto: CreateAdministratorDto): Promise<CreateAdministratorResponse> {
     await this.ensurePhoneAvailable(dto.phone);
     await this.ensureGymExists(dto.gym_id);
 
@@ -65,22 +65,22 @@ export class ReceptionsService {
     const passwordHash = await bcrypt.hash(initialPassword, BCRYPT_ROUNDS);
 
     try {
-      const reception = await this.prisma.$transaction(async (tx) => {
+      const administrator = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
             phone: dto.phone,
             passwordHash,
-            role: Role.RECEPTION,
+            role: Role.ADMINISTRATOR,
             name: dto.name,
           },
         });
 
-        return tx.reception.create({
+        return tx.administrator.create({
           data: { userId: user.id, gymId: dto.gym_id },
         });
       });
 
-      const created = await this.findEntity(reception.id);
+      const created = await this.findEntity(administrator.id);
 
       return {
         ...this.toResponse(created),
@@ -94,16 +94,16 @@ export class ReceptionsService {
 
   async update(
     id: string,
-    dto: UpdateReceptionDto,
-  ): Promise<ReceptionResponse> {
-    const reception = await this.findEntity(id);
-    const phone = dto.phone ?? reception.user.phone;
+    dto: UpdateAdministratorDto,
+  ): Promise<AdministratorResponse> {
+    const administrator = await this.findEntity(id);
+    const phone = dto.phone ?? administrator.user.phone;
 
-    if (phone !== reception.user.phone) {
+    if (phone !== administrator.user.phone) {
       await this.ensurePhoneAvailable(phone);
     }
 
-    if (dto.gym_id && dto.gym_id !== reception.gymId) {
+    if (dto.gym_id && dto.gym_id !== administrator.gymId) {
       await this.ensureGymExists(dto.gym_id);
     }
 
@@ -114,7 +114,7 @@ export class ReceptionsService {
     try {
       await this.prisma.$transaction(async (tx) => {
         await tx.user.update({
-          where: { id: reception.userId },
+          where: { id: administrator.userId },
           data: {
             phone: dto.phone,
             name: dto.name,
@@ -123,7 +123,7 @@ export class ReceptionsService {
         });
 
         if (dto.gym_id) {
-          await tx.reception.update({
+          await tx.administrator.update({
             where: { id },
             data: { gymId: dto.gym_id },
           });
@@ -131,7 +131,7 @@ export class ReceptionsService {
 
         if (passwordHash) {
           await tx.refreshToken.deleteMany({
-            where: { userId: reception.userId },
+            where: { userId: administrator.userId },
           });
         }
       });
@@ -147,7 +147,7 @@ export class ReceptionsService {
     id: string,
     password?: string,
   ): Promise<{ new_password: string }> {
-    const reception = await this.findEntity(id);
+    const administrator = await this.findEntity(id);
     const newPassword =
       password ??
       this.configService.getOrThrow<string>('DEFAULT_CLIENT_PASSWORD');
@@ -155,11 +155,11 @@ export class ReceptionsService {
 
     await this.prisma.$transaction([
       this.prisma.user.update({
-        where: { id: reception.userId },
+        where: { id: administrator.userId },
         data: { passwordHash },
       }),
       this.prisma.refreshToken.deleteMany({
-        where: { userId: reception.userId },
+        where: { userId: administrator.userId },
       }),
     ]);
 
@@ -167,42 +167,42 @@ export class ReceptionsService {
   }
 
   async remove(id: string): Promise<void> {
-    const reception = await this.findEntity(id);
+    const administrator = await this.findEntity(id);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.refreshToken.deleteMany({
-        where: { userId: reception.userId },
+        where: { userId: administrator.userId },
       });
       await tx.notificationRecipient.deleteMany({
-        where: { userId: reception.userId },
+        where: { userId: administrator.userId },
       });
-      await tx.reception.delete({ where: { id } });
-      await tx.user.delete({ where: { id: reception.userId } });
+      await tx.administrator.delete({ where: { id } });
+      await tx.user.delete({ where: { id: administrator.userId } });
     });
   }
 
-  private async findEntity(id: string): Promise<ReceptionEntity> {
-    const reception = await this.prisma.reception.findUnique({
+  private async findEntity(id: string): Promise<AdministratorEntity> {
+    const administrator = await this.prisma.administrator.findUnique({
       where: { id },
-      include: receptionInclude,
+      include: administratorInclude,
     });
 
-    if (!reception) {
-      throw new NotFoundException('Reception not found');
+    if (!administrator) {
+      throw new NotFoundException('Administrator not found');
     }
 
-    return reception;
+    return administrator;
   }
 
-  private toResponse(reception: ReceptionEntity): ReceptionResponse {
+  private toResponse(administrator: AdministratorEntity): AdministratorResponse {
     return {
-      id: reception.id,
-      userId: reception.userId,
-      phone: reception.user.phone,
-      name: reception.user.name,
-      gymId: reception.gymId,
-      gymName: reception.gym.name,
-      createdAt: reception.createdAt,
+      id: administrator.id,
+      userId: administrator.userId,
+      phone: administrator.user.phone,
+      name: administrator.user.name,
+      gymId: administrator.gymId,
+      gymName: administrator.gym.name,
+      createdAt: administrator.createdAt,
     };
   }
 

@@ -6,54 +6,93 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/api_error.dart';
+import '../client/client_workout_models.dart';
+import '../common/period_filter.dart';
 import 'exercise_progress_screen.dart';
 import 'pdf_export_button.dart';
 import 'report_models.dart';
 import 'reports_providers.dart';
 
-class ProgressTab extends StatelessWidget {
+class ProgressTab extends ConsumerStatefulWidget {
   const ProgressTab({super.key, required this.clientId});
 
   final String clientId;
 
   @override
+  ConsumerState<ProgressTab> createState() => _ProgressTabState();
+}
+
+class _ProgressTabState extends ConsumerState<ProgressTab> {
+  WorkoutPeriod _period = WorkoutPeriod.all;
+
+  ({DateTime? from, DateTime? to}) get _range {
+    if (_period == WorkoutPeriod.all) {
+      return (from: null, to: null);
+    }
+    final range = workoutPeriodRange(_period);
+    return (from: range.from, to: range.to);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final range = _range;
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        PeriodFilter(
+          value: _period,
+          onChanged: (period) => setState(() => _period = period),
+        ),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             PdfExportButton(
-              clientId: clientId,
+              clientId: widget.clientId,
               kind: 'weight',
               label: 'PDF: вес',
             ),
             PdfExportButton(
-              clientId: clientId,
+              clientId: widget.clientId,
               kind: 'exercises',
               label: 'PDF: упражнения',
             ),
           ],
         ),
         const SizedBox(height: 12),
-        WeightChartSection(clientId: clientId),
+        WeightChartSection(
+          clientId: widget.clientId,
+          from: range.from,
+          to: range.to,
+        ),
         const SizedBox(height: 12),
-        ExerciseSummarySection(clientId: clientId),
+        ExerciseSummarySection(
+          clientId: widget.clientId,
+          from: range.from,
+          to: range.to,
+        ),
       ],
     );
   }
 }
 
 class WeightChartSection extends ConsumerWidget {
-  const WeightChartSection({required this.clientId, super.key});
+  const WeightChartSection({
+    required this.clientId,
+    this.from,
+    this.to,
+    super.key,
+  });
 
   final String clientId;
+  final DateTime? from;
+  final DateTime? to;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dynamics = ref.watch(weightDynamicsProvider(clientId));
+    final params = (clientId: clientId, from: from, to: to);
+    final dynamics = ref.watch(weightDynamicsProvider(params));
 
     return Card(
       margin: EdgeInsets.zero,
@@ -96,7 +135,7 @@ class WeightChartSection extends ConsumerWidget {
                       ),
               AsyncError(:final error) => _ErrorBox(
                 message: apiErrorMessage(error),
-                onRetry: () => ref.invalidate(weightDynamicsProvider(clientId)),
+                onRetry: () => ref.invalidate(weightDynamicsProvider(params)),
               ),
               _ => const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
@@ -255,13 +294,21 @@ FlDotPainter _defaultDot(
 }
 
 class ExerciseSummarySection extends ConsumerWidget {
-  const ExerciseSummarySection({required this.clientId, super.key});
+  const ExerciseSummarySection({
+    required this.clientId,
+    this.from,
+    this.to,
+    super.key,
+  });
 
   final String clientId;
+  final DateTime? from;
+  final DateTime? to;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summary = ref.watch(exercisesSummaryProvider(clientId));
+    final params = (clientId: clientId, from: from, to: to);
+    final summary = ref.watch(exercisesSummaryProvider(params));
 
     return Card(
       margin: EdgeInsets.zero,
@@ -299,6 +346,8 @@ class ExerciseSummarySection extends ConsumerWidget {
                                   clientId: clientId,
                                   exerciseId: item.exerciseId,
                                   exerciseName: item.exerciseName,
+                                  from: from,
+                                  to: to,
                                 ),
                               ),
                             ),
@@ -310,7 +359,7 @@ class ExerciseSummarySection extends ConsumerWidget {
               child: _ErrorBox(
                 message: apiErrorMessage(error),
                 onRetry: () =>
-                    ref.invalidate(exercisesSummaryProvider(clientId)),
+                    ref.invalidate(exercisesSummaryProvider(params)),
               ),
             ),
             _ => const Padding(

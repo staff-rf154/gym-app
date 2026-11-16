@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -28,14 +30,44 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
   final _steps = <String, int>{};
   late List<ClientWorkout> _workouts;
   bool _saving = false;
+  bool _detailsLoading = false;
   String? _actionWorkoutId;
 
   @override
   void initState() {
     super.initState();
     _workouts = List.of(widget.workouts);
-    for (final workout in _workouts) {
-      _ensureControllers(workout);
+    if (_workouts.any((workout) => workout.items.isEmpty)) {
+      _detailsLoading = true;
+      unawaited(_loadDetails());
+    } else {
+      for (final workout in _workouts) {
+        _ensureControllers(workout);
+      }
+    }
+  }
+
+  Future<void> _loadDetails() async {
+    try {
+      final workouts = await ref
+          .read(clientWorkoutsApiProvider)
+          .fetchWorkouts(from: widget.date, to: widget.date);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _workouts = workouts;
+        for (final workout in _workouts) {
+          _ensureControllers(workout);
+        }
+        _detailsLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _detailsLoading = false);
+      _showMessage(apiErrorMessage(error));
     }
   }
 
@@ -77,7 +109,11 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
         return;
       }
       _replaceWorkout(updated);
-      ref.invalidate(clientMonthWorkoutsProvider);
+      ref.invalidate(
+        clientMonthWorkoutsProvider(
+          MonthKey(widget.date.year, widget.date.month),
+        ),
+      );
     } catch (error) {
       if (mounted) {
         _showMessage(apiErrorMessage(error));
@@ -129,7 +165,11 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
       }
       _replaceWorkout(updated);
       _showMessage('Тренировка завершена');
-      ref.invalidate(clientMonthWorkoutsProvider);
+      ref.invalidate(
+        clientMonthWorkoutsProvider(
+          MonthKey(widget.date.year, widget.date.month),
+        ),
+      );
     } catch (error) {
       if (mounted) {
         _showMessage(apiErrorMessage(error));
@@ -181,7 +221,11 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
       final saved = await _persistWorkout(workout);
       if (saved && mounted) {
         _showMessage('Результаты сохранены');
-        ref.invalidate(clientMonthWorkoutsProvider);
+        ref.invalidate(
+        clientMonthWorkoutsProvider(
+          MonthKey(widget.date.year, widget.date.month),
+        ),
+      );
       }
     } finally {
       if (mounted) {
@@ -238,6 +282,11 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_detailsLoading)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: LinearProgressIndicator(),
+            ),
           for (final workout in _workouts) ...[
             _WorkoutHeader(
               workout: workout,
@@ -249,7 +298,7 @@ class _WorkoutDayScreenState extends ConsumerState<WorkoutDayScreen> {
               onFinish: workout.isInProgress ? () => _finish(workout) : null,
             ),
             const SizedBox(height: 8),
-            if (workout.items.isEmpty)
+            if (!_detailsLoading && workout.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(child: Text('В тренировке нет упражнений')),

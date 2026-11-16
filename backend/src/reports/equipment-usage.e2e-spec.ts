@@ -12,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const API_PREFIX = '/api/v1';
 const ADMIN_PHONE = '+79990000751';
-const RECEPTION_PHONE = '+79990000752';
+const ADMINISTRATOR_PHONE = '+79990000752';
 const TRAINER_PHONE = '+79990000753';
 const OTHER_TRAINER_PHONE = '+79990000754';
 const CLIENT_PHONE = '+79990000755';
@@ -36,7 +36,7 @@ describe('Reports equipment usage (e2e)', () => {
   let trainerId: string;
   let otherTrainerId: string;
   let adminToken: string;
-  let receptionToken: string;
+  let administratorToken: string;
   let trainerToken: string;
   let clientToken: string;
 
@@ -69,7 +69,7 @@ describe('Reports equipment usage (e2e)', () => {
 
     const phones = [
       ADMIN_PHONE,
-      RECEPTION_PHONE,
+      ADMINISTRATOR_PHONE,
       TRAINER_PHONE,
       OTHER_TRAINER_PHONE,
       CLIENT_PHONE,
@@ -97,7 +97,7 @@ describe('Reports equipment usage (e2e)', () => {
     await prisma.gymEquipment.deleteMany({
       where: { gym: { name: { in: [GYM_NAME, OTHER_GYM_NAME] } } },
     });
-    await prisma.reception.deleteMany({
+    await prisma.administrator.deleteMany({
       where: { user: { phone: { in: phones } } },
     });
     await prisma.client.deleteMany({
@@ -126,12 +126,12 @@ describe('Reports equipment usage (e2e)', () => {
       },
     });
 
-    const receptionUser = await prisma.user.create({
+    const administratorUser = await prisma.user.create({
       data: {
-        phone: RECEPTION_PHONE,
+        phone: ADMINISTRATOR_PHONE,
         passwordHash,
-        role: Role.RECEPTION,
-        name: 'E2E Usage Reception',
+        role: Role.ADMINISTRATOR,
+        name: 'E2E Usage Administrator',
       },
     });
 
@@ -146,8 +146,8 @@ describe('Reports equipment usage (e2e)', () => {
       })
     ).id;
 
-    await prisma.reception.create({
-      data: { userId: receptionUser.id, gymId },
+    await prisma.administrator.create({
+      data: { userId: administratorUser.id, gymId },
     });
 
     treadmillId = (
@@ -328,7 +328,7 @@ describe('Reports equipment usage (e2e)', () => {
     );
 
     adminToken = await login(ADMIN_PHONE);
-    receptionToken = await login(RECEPTION_PHONE);
+    administratorToken = await login(ADMINISTRATOR_PHONE);
     trainerToken = await login(TRAINER_PHONE);
     clientToken = await login(CLIENT_PHONE);
   });
@@ -355,7 +355,7 @@ describe('Reports equipment usage (e2e)', () => {
     await prisma.gymEquipment.deleteMany({
       where: { gymId: { in: [gymId, otherGymId] } },
     });
-    await prisma.reception.deleteMany({ where: { gymId } });
+    await prisma.administrator.deleteMany({ where: { gymId } });
     await prisma.client.deleteMany({
       where: { id: { in: [clientId, otherClientId] } },
     });
@@ -370,7 +370,7 @@ describe('Reports equipment usage (e2e)', () => {
           phone: {
             in: [
               ADMIN_PHONE,
-              RECEPTION_PHONE,
+              ADMINISTRATOR_PHONE,
               TRAINER_PHONE,
               OTHER_TRAINER_PHONE,
               CLIENT_PHONE,
@@ -385,7 +385,7 @@ describe('Reports equipment usage (e2e)', () => {
         phone: {
           in: [
             ADMIN_PHONE,
-            RECEPTION_PHONE,
+            ADMINISTRATOR_PHONE,
             TRAINER_PHONE,
             OTHER_TRAINER_PHONE,
             CLIENT_PHONE,
@@ -487,16 +487,16 @@ describe('Reports equipment usage (e2e)', () => {
     expect(byClient.body.totalUsage).toBe(1);
   });
 
-  it('RECEPTION: только свой зал, чужой gym_id → 403', async () => {
+  it('ADMINISTRATOR: только свой зал, чужой gym_id → 403', async () => {
     const own = await authedGet(
-      receptionToken,
+      administratorToken,
       '/reports/equipment-usage?from=2027-10-01&to=2027-10-31',
     );
     expect(own.status).toBe(200);
     expect(own.body.totalUsage).toBe(3);
 
     const foreign = await authedGet(
-      receptionToken,
+      administratorToken,
       `/reports/equipment-usage?gym_id=${otherGymId}`,
     );
     expect(foreign.status).toBe(403);
